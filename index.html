@@ -8336,6 +8336,32 @@ const ENG_TODOS = [
     'BigBrother':   { bg: 'rgba(248,113,113,0.12)', color: 'var(--red)' },
   };
 
+  const LINEAR_URLS = {
+    'ENG-1785': 'https://linear.app/harpers/issue/ENG-1785/fix-coalesce-null-coreopportunityname-in-migi-assemblecontext-query',
+    'ENG-1786': 'https://linear.app/harpers/issue/ENG-1786/fix-megabro-sync-pipeline-references-non-existent-insuranceorder-ext',
+    'ENG-1787': 'https://linear.app/harpers/issue/ENG-1787/feat-eng-1350-lifecycle-sync-cron-add-placement-intent-to-sync-entity',
+    'ENG-1788': 'https://linear.app/harpers/issue/ENG-1788/feat-enrich-placements-page-sla-indicators-carrier-detail-missing',
+    'ENG-1789': 'https://linear.app/harpers/issue/ENG-1789/feat-bulk-actions-for-placements-pauseresumecancel',
+    'ENG-1790': 'https://linear.app/harpers/issue/ENG-1790/feat-rfq-drill-down-in-placements-side-panel',
+    'ENG-1791': 'https://linear.app/harpers/issue/ENG-1791/design-pi-aggregation-rules-from-rfq-line-items-harper-claw-transition',
+    'ENG-1792': 'https://linear.app/harpers/issue/ENG-1792/feat-remarketing-surface-on-placements-page',
+    'ENG-1795': 'https://linear.app/harpers/issue/ENG-1795/consolidate-rfq-tables-remove-cpqrequest-for-quote-two-tier-pattern',
+    'ENG-1802': 'https://linear.app/harpers/issue/ENG-1802/add-channel-field-to-placementintent',
+    'ENG-1803': 'https://linear.app/harpers/issue/ENG-1803/consolidate-rfq-channels-3-2',
+    'ENG-1804': 'https://linear.app/harpers/issue/ENG-1804/pi-rfqli-status-derivation-then-drop-rfqlistatus',
+    'ENG-1805': 'https://linear.app/harpers/issue/ENG-1805/apply-missing-rfq-columns-migration',
+    'ENG-1806': 'https://linear.app/harpers/issue/ENG-1806/deprecate-rfqlineitemmachine',
+    'ENG-1807': 'https://linear.app/harpers/issue/ENG-1807/apply-migration-083-cleanup-actually-drop-legacy-taskassignment-tables',
+    'ENG-1808': 'https://linear.app/harpers/issue/ENG-1808/update-process-manager-for-pi-v2',
+    'ENG-1809': 'https://linear.app/harpers/issue/ENG-1809/drop-singulardead-form-of-insurancefinancing-agreement-and',
+    'ENG-1810': 'https://linear.app/harpers/issue/ENG-1810/add-direct-state-columns-to-placementintent-entity-alter-table',
+    'ENG-1811': 'https://linear.app/harpers/issue/ENG-1811/investigate-insuranceentity-transition-vs-insuranceentity-transitions',
+    'ENG-1812': 'https://linear.app/harpers/issue/ENG-1812/remove-test-seed-tables-from-production-insurance-schema',
+    'ENG-1813': 'https://linear.app/harpers/issue/ENG-1813/fix-insurancequote-coverage-line-ghost-fk-in-migration-126',
+    'ENG-1814': 'https://linear.app/harpers/issue/ENG-1814/cashmoney-update-presentation-personalizego-to-use-canonical-rfq',
+    'ENG-1815': 'https://linear.app/harpers/issue/ENG-1815/megabro-remove-stale-rfq-line-item-v2-comments-from-submissions-api',
+    'ENG-1816': 'https://linear.app/harpers/issue/ENG-1816/cls-reconcile-dead-rfqrequestforquote-struct-with-live',
+  };
   const LINEAR_BASE = 'https://linear.app/harpers/issue/';
 
   let activePhases = new Set();
@@ -8350,7 +8376,8 @@ const ENG_TODOS = [
 
   function ticketBadge(t) {
     if (!t) return `<span style="color:var(--text-dim); font-size:11px;">–</span>`;
-    return `<a href="${LINEAR_BASE}${t}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:11px; font-weight:600; white-space:nowrap;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${t} ↗</a>`;
+    const url = LINEAR_URLS[t] || (LINEAR_BASE + t);
+    return `<a href="${url}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:11px; font-weight:600; white-space:nowrap;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${t} ↗</a>`;
   }
 
   function renderRows(todos) {
