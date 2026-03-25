@@ -1287,10 +1287,57 @@
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
     Event bus topics relevant to MiniOrq placement orchestration.
   </p>
-  <div style="overflow-x:auto; margin-bottom:24px;">
+  <div style="overflow-x:auto; margin-bottom:32px;">
     <table class="rules-table" style="max-width:900px;">
       <thead><tr><th>Topic</th><th>Direction</th><th>Events</th><th>Consumer Group</th></tr></thead>
       <tbody id="miniorq-topics-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Section 6: Orchestration Actions by PI Transition -->
+  <h3 style="font-size:14px; margin-bottom:8px; color:var(--accent);">Orchestration Actions by PI Transition</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:6px;">
+    For each PI v2 state transition, what MiniOrq must <strong>do</strong> — not just the state change, but all side effects:
+    work item creation, CLS API calls, Relay event emission, notifications, and downstream triggers.
+    Click a card to expand. Color coding: <span style="color:#60a5fa;">blue = CLS calls</span>,
+    <span style="color:var(--green);">green = work items</span>,
+    <span style="color:#c084fc;">purple = Relay</span>,
+    <span style="color:#fb923c;">orange = notifications</span>.
+  </p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+    <span style="font-size:10px; padding:2px 8px; border-radius:4px; background:rgba(37,99,235,0.15); color:#60a5fa; border:1px solid rgba(96,165,250,0.3);">Happy Path</span>
+    <span style="font-size:10px; padding:2px 8px; border-radius:4px; background:rgba(248,113,113,0.12); color:var(--red); border:1px solid rgba(248,113,113,0.3);">Terminal</span>
+    <span style="font-size:10px; padding:2px 8px; border-radius:4px; background:rgba(250,204,21,0.12); color:var(--yellow); border:1px solid rgba(250,204,21,0.3);">Recovery</span>
+    <span style="font-size:10px; padding:2px 8px; border-radius:4px; background:rgba(148,163,184,0.1); color:var(--text-dim); border:1px solid var(--border);">Hold/Pause</span>
+  </div>
+  <div id="miniorq-transitions" style="display:flex; flex-direction:column; gap:8px; max-width:1000px; margin-bottom:32px;"></div>
+
+  <!-- Section 7: Relay Events Emitted by MiniOrq -->
+  <h3 style="font-size:14px; margin-bottom:8px; color:var(--accent);">Relay Events Emitted by MiniOrq</h3>
+  <div style="padding:14px 16px; background:rgba(192,132,252,0.08); border:1px solid rgba(192,132,252,0.25); border-radius:8px; max-width:900px; margin-bottom:32px;">
+    <div style="font-size:12px; font-weight:600; color:#c084fc; margin-bottom:8px;">CLS Outbox Pattern</div>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:8px; line-height:1.6;">
+      MiniOrq does <strong>NOT</strong> emit its own events directly to Relay. All event emission happens via the
+      <strong>CLS outbox pattern</strong> — when MiniOrq calls <code>POST /placements/{id}/transition</code>,
+      CLS records the transition in its outbox table, and the <strong>OutboxRelay</strong> worker publishes
+      the lifecycle event to <code>relay.lifecycle</code> automatically.
+    </p>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:0; line-height:1.6;">
+      MiniOrq <strong>MAY</strong> emit signals to <code>relay.tasks</code> to trigger the validation pipeline
+      when a quote is received (e.g., to invoke Atlas/Son-of-Atlas validation). This is TBD and may instead
+      be handled by CLS Process Manager consuming the <code>placement.quote_received</code> lifecycle event.
+    </p>
+  </div>
+
+  <!-- Section 8: Work Item Templates -->
+  <h3 style="font-size:14px; margin-bottom:8px; color:var(--accent);">Work Item Templates</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Work items that MiniOrq auto-creates on each PI transition. All items have <code>entity_type = placement_intent</code>.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:24px;">
+    <table class="rules-table" style="max-width:1000px;">
+      <thead><tr><th>PI Transition</th><th>Work Item Title Template</th><th>Kind</th><th>Key Metadata</th></tr></thead>
+      <tbody id="miniorq-workitems-body"></tbody>
     </table>
   </div>
 </div>
@@ -5311,6 +5358,390 @@ function buildMiniOrq() {
 }
 
 buildMiniOrq();
+
+// ═══════════════════════════════════════════════
+// MINIORQ — ORCHESTRATION ACTIONS (PI TRANSITIONS)
+// ═══════════════════════════════════════════════
+
+(function buildMiniOrqTransitions() {
+
+// group: "happy" | "terminal" | "recovery" | "hold"
+const PI_TRANSITIONS = [
+  {
+    group: 'happy',
+    from: 'submitted',
+    to: 'acknowledged',
+    trigger: 'Email classified as SUBMISSION (carrier ack) on relay.comms, or operator manual action on MegaBro.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "acknowledged" }' }
+    ],
+    workItems: [],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: 'Optional transition — can be skipped entirely. Informational only; no work items created.'
+  },
+  {
+    group: 'happy',
+    from: 'submitted / acknowledged',
+    to: 'under_review',
+    trigger: 'Email from carrier indicating active review on relay.comms, or operator manual.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "under_review" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Monitor UW review — SLA 5 business days"', kind: 'task', meta: '{ sla_days: 5 }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: 'SLA clock starts here for tracking carrier response time.'
+  },
+  {
+    group: 'happy',
+    from: 'under_review',
+    to: 'info_requested',
+    trigger: 'Email classified as SUBMISSION_TO_QUOTE (UW requests docs) on relay.comms, or operator manual.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "info_requested" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Provide [requested docs] to [carrier]"', kind: 'task', meta: '{ blocker: "customer", docs_requested: "..." }' }
+    ],
+    relay: [],
+    notifications: [
+      'May trigger harper-claw to draft customer email requesting docs (consolidated at account level across all PIs).'
+    ],
+    downstream: [],
+    notes: 'Blocker tracked on work item, not PI state. PI stays info_requested until docs provided.'
+  },
+  {
+    group: 'happy',
+    from: 'info_requested',
+    to: 'under_review',
+    trigger: 'Docs forwarded to carrier (operator confirms), or email indicating UW resumed review.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "under_review" }' }
+    ],
+    workItems: [
+      { action: 'COMPLETE', title: 'Complete the info_requested task (blocker cleared).', kind: '', meta: '' },
+      { action: 'CREATE', title: '"Monitor UW review — docs submitted [date]"', kind: 'task', meta: '{ sla_days: 5 }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: 'Blocker cleared. Ball back in carrier\'s court.'
+  },
+  {
+    group: 'happy',
+    from: 'under_review',
+    to: 'price_indication',
+    trigger: 'CASHMONEY creates a Quote with quote_type=price_indication → lifecycle event on relay.lifecycle.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "price_indication" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Review price indication from [carrier] — $[premium]"', kind: 'task', meta: '{ premium: X, limits: {...} }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: 'RFQLI payload fields (PriceIndicationPremium, PriceIndicationLimits) populated by CASHMONEY.'
+  },
+  {
+    group: 'happy',
+    from: 'under_review / price_indication',
+    to: 'quote_received',
+    trigger: 'CASHMONEY transitions RFQLI to "quoted" → lifecycle event on relay.lifecycle. Or CASHMONEY creates Quote with quote_type=full_quote.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "quote_received" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Validate quote from [carrier] — $[premium]"', kind: 'task', meta: '{ quote_id: X, premium: Y, needs_validation: true }' }
+    ],
+    relay: [
+      'Emit signal to relay.tasks or call Atlas/Son-of-Atlas validation endpoint to trigger the validation pipeline (TBD).'
+    ],
+    notifications: [
+      'Slack notification to company channel: quote received from [carrier].'
+    ],
+    downstream: [],
+    notes: 'This is the trigger for the validation pipeline. Quote.status should be pending_validation at this point.'
+  },
+  {
+    group: 'happy',
+    from: 'quote_received',
+    to: 'approved_quote',
+    trigger: 'Quote validation passes (auto_approve verdict from Atlas-Lackey, or operator manually approves on MegaBro).',
+    clsCalls: [
+      { method: 'POST', endpoint: '/quotes/{quote_id}/transition', body: '{ status: "pending_decision" }  ← if auto-validated' },
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "approved_quote" }' }
+    ],
+    workItems: [
+      { action: 'COMPLETE', title: 'Complete the validation task (validation passed).', kind: '', meta: '' },
+      { action: 'CREATE', title: '"Present quote to customer — [carrier] $[premium]"', kind: 'task', meta: '{ quote_id: X, for_sales: true }' }
+    ],
+    relay: [
+      'CLS outbox emits placement.quote_approved to relay.lifecycle automatically.'
+    ],
+    notifications: [],
+    downstream: [
+      'CLS Process Manager auto-advances CoverageIntent from placement → sales phase.'
+    ],
+    notes: 'Positive terminal for PI. Everything after approved_quote is the sales/binding domain.'
+  },
+  {
+    group: 'terminal',
+    from: 'quote_received',
+    to: 'disqualified_quote',
+    trigger: 'Quote validation fails (FAIL verdict from Atlas-Lackey, or operator rejects on MegaBro).',
+    clsCalls: [
+      { method: 'POST', endpoint: '/quotes/{quote_id}/transition', body: '{ status: "invalid" }' },
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "disqualified_quote" }' }
+    ],
+    workItems: [
+      { action: 'COMPLETE', title: 'Complete the validation task with result=failed.', kind: '', meta: '' },
+      { action: 'CREATE', title: '"Review disqualified quote from [carrier] — determine next steps"', kind: 'task', meta: '{ quote_id: X, validation_result: "FAIL" }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: 'Operator decides: rework (go back to carrier) or remarket (try different carriers). The follow-up task drives the next action.'
+  },
+  {
+    group: 'terminal',
+    from: 'any active state',
+    to: 'declined',
+    trigger: 'Email classified as INSURANCE_DECLINE on relay.comms, CASHMONEY transitions RFQLI to "declined", or operator manual.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "declined" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Review decline from [carrier] — reason: [category]"', kind: 'task', meta: '{ decline_category: "..." }' },
+      { action: 'CREATE', title: '"All carriers declined for [coverage] — evaluate remarketing"  ← only if ALL PIs for this OLI are now declined', kind: 'task', meta: '{ decline_reasons: [...] }' }
+    ],
+    relay: [
+      'CLS outbox handles lifecycle event automatically.'
+    ],
+    notifications: [],
+    downstream: [
+      'Query all PIs for this OLI. If all declined → flag opportunity for remarketing on MegaBro.'
+    ],
+    notes: 'Declination category stored on RFQLI entity. Cross-PI check needed to detect full-OLI decline.'
+  },
+  {
+    group: 'terminal',
+    from: 'any active state',
+    to: 'withdrawn',
+    trigger: 'Operator withdraws the request on MegaBro.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "withdrawn" }' }
+    ],
+    workItems: [
+      { action: 'CANCEL', title: 'Cancel all active tasks for this PI.', kind: '', meta: '' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: ''
+  },
+  {
+    group: 'hold',
+    from: 'any active state',
+    to: 'on_hold',
+    trigger: 'Operator clicks "Pause" on MegaBro.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "on_hold" }' }
+    ],
+    workItems: [
+      { action: 'SUSPEND', title: 'Suspend all active tasks for this PI. Record hold reason in metadata.', kind: '', meta: '{ hold_reason: "..." }' }
+    ],
+    relay: [],
+    notifications: [
+      'Harper-claw must check on_hold status before sending any follow-ups for this PI.'
+    ],
+    downstream: [],
+    notes: 'Preserves prior RFQLI status. Communications suppressed.'
+  },
+  {
+    group: 'hold',
+    from: 'on_hold',
+    to: '[any active state]',
+    trigger: 'Operator clicks "Resume" on MegaBro.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "[target_state]" }' }
+    ],
+    workItems: [
+      { action: 'REACTIVATE', title: 'Reactivate suspended tasks.', kind: '', meta: '' },
+      { action: 'CREATE', title: '"Resumed from hold — follow up with [carrier/customer]"', kind: 'task', meta: '' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: ''
+  },
+  {
+    group: 'recovery',
+    from: 'declined / disqualified_quote',
+    to: 'remarketing',
+    trigger: 'Operator clicks "Remarket" on MegaBro after reviewing decline reasons.',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "remarketing" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Prepare remarketing packet for [coverage] — target E&S markets"', kind: 'task', meta: '{ prior_si_id: "..." }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [
+      'CLS Process Manager backtracks CoverageIntent: placement → submission.',
+      'New SubmissionIntent created (type=remarketing, prior_si_id references original).',
+      'New RFQs + PIs will be created when the new submission is dispatched.'
+    ],
+    notes: ''
+  },
+  {
+    group: 'recovery',
+    from: 'info_requested',
+    to: 'rework',
+    trigger: 'Operator determines packet was defective (wrong docs, wrong entity).',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "rework" }' }
+    ],
+    workItems: [
+      { action: 'CREATE', title: '"Fix submission packet for [coverage] — [issue description]"', kind: 'task', meta: '{ issue_description: "..." }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [
+      'CLS Process Manager backtracks CoverageIntent: placement → submission.',
+      'New SubmissionIntent created (type=remarketing, same carrier target).'
+    ],
+    notes: ''
+  }
+];
+
+const WORK_ITEM_TEMPLATES = [
+  { transition: '→ under_review',      title: '"Monitor UW review — SLA {days}d"',               kind: 'task', meta: '{ sla_days: 5 }' },
+  { transition: '→ info_requested',    title: '"Provide {docs} to {carrier}"',                    kind: 'task', meta: '{ blocker: "customer", docs: "..." }' },
+  { transition: '→ price_indication',  title: '"Review price indication — {carrier} ${premium}"', kind: 'task', meta: '{ premium, limits }' },
+  { transition: '→ quote_received',    title: '"Validate quote — {carrier} ${premium}"',          kind: 'task', meta: '{ quote_id, needs_validation: true }' },
+  { transition: '→ approved_quote',    title: '"Present quote to customer — {carrier} ${premium}"', kind: 'task', meta: '{ quote_id, for_sales: true }' },
+  { transition: '→ disqualified_quote',title: '"Review disqualified quote — determine next steps"', kind: 'task', meta: '{ quote_id, validation_result }' },
+  { transition: '→ declined (all PIs)', title: '"All carriers declined — evaluate remarketing"',  kind: 'task', meta: '{ decline_reasons: [...] }' },
+  { transition: '→ remarketing',       title: '"Prepare remarketing packet — target E&S"',        kind: 'task', meta: '{ prior_si_id }' },
+  { transition: '→ rework',            title: '"Fix submission packet — {issue}"',                kind: 'task', meta: '{ issue_description }' }
+];
+
+const GROUP_META = {
+  happy:    { label: 'Happy Path',  color: '#60a5fa', border: 'rgba(96,165,250,0.35)',  bg: 'rgba(37,99,235,0.08)' },
+  terminal: { label: 'Terminal',    color: 'var(--red)', border: 'rgba(248,113,113,0.35)', bg: 'rgba(248,113,113,0.06)' },
+  recovery: { label: 'Recovery',    color: 'var(--yellow)', border: 'rgba(250,204,21,0.35)', bg: 'rgba(250,204,21,0.06)' },
+  hold:     { label: 'Hold / Pause', color: 'var(--text-dim)', border: 'var(--border)', bg: 'rgba(148,163,184,0.05)' }
+};
+
+function renderTransitionCard(t) {
+  const gm = GROUP_META[t.group];
+
+  const clsHtml = t.clsCalls.map(c => `
+    <div style="display:flex; gap:8px; align-items:flex-start; padding:4px 0; font-size:11px;">
+      <code style="color:${c.method === 'POST' ? 'var(--green)' : 'var(--accent)'}; min-width:40px; flex-shrink:0;">${c.method}</code>
+      <code style="color:#60a5fa; word-break:break-all;">${c.endpoint}</code>
+      <span style="color:var(--text-dim); white-space:nowrap;">${c.body}</span>
+    </div>
+  `).join('');
+
+  const wiHtml = t.workItems.length === 0
+    ? '<span style="color:var(--text-dim); font-size:11px;">None</span>'
+    : t.workItems.map(w => {
+        const actionColor = w.action === 'CREATE' ? 'var(--green)' : w.action === 'COMPLETE' ? '#34d399' : w.action === 'CANCEL' ? 'var(--red)' : w.action === 'SUSPEND' ? 'var(--yellow)' : 'var(--cyan)';
+        return `<div style="display:flex; gap:8px; align-items:flex-start; padding:4px 0; font-size:11px;">
+          <span style="color:${actionColor}; font-weight:700; min-width:74px; flex-shrink:0;">[${w.action}]</span>
+          <span style="color:var(--text);">${w.title}${w.meta ? `  <span style='color:var(--text-dim);'>${w.meta}</span>` : ''}</span>
+        </div>`;
+      }).join('');
+
+  const relayHtml = t.relay.length === 0
+    ? '<span style="color:var(--text-dim); font-size:11px;">None — CLS outbox handles all lifecycle events automatically.</span>'
+    : t.relay.map(r => `<div style="font-size:11px; color:#c084fc; padding:3px 0;">• ${r}</div>`).join('');
+
+  const notifHtml = t.notifications.length === 0
+    ? '<span style="color:var(--text-dim); font-size:11px;">None</span>'
+    : t.notifications.map(n => `<div style="font-size:11px; color:#fb923c; padding:3px 0;">• ${n}</div>`).join('');
+
+  const downHtml = t.downstream.length === 0
+    ? '<span style="color:var(--text-dim); font-size:11px;">None</span>'
+    : t.downstream.map(d => `<div style="font-size:11px; color:var(--yellow); padding:3px 0;">• ${d}</div>`).join('');
+
+  const notesHtml = t.notes
+    ? `<div style="font-size:11px; color:var(--text-dim); font-style:italic; padding:6px 0 0 0; border-top:1px solid var(--border); margin-top:4px;">${t.notes}</div>`
+    : '';
+
+  return `
+    <div style="background:${gm.bg}; border:1px solid ${gm.border}; border-radius:8px; overflow:hidden;">
+      <div style="padding:12px 16px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;"
+           onclick="this.nextElementSibling.classList.toggle('miniorq-flow-open')">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-size:10px; font-weight:700; color:${gm.color}; background:${gm.border}; padding:2px 8px; border-radius:3px; flex-shrink:0;">${gm.label}</span>
+          <span style="font-size:13px; font-weight:600; color:var(--text);">
+            <span style="color:var(--text-dim);">${t.from}</span>
+            <span style="color:${gm.color}; margin:0 6px;">→</span>
+            <span style="color:${gm.color};">${t.to}</span>
+          </span>
+        </div>
+        <span style="font-size:10px; color:var(--text-dim); white-space:nowrap; margin-left:12px; flex-shrink:0;">click to expand</span>
+      </div>
+      <div class="miniorq-flow-body" style="max-height:0; overflow:hidden; transition:max-height 0.4s ease;">
+        <div style="padding:4px 16px 14px 16px; border-top:1px solid ${gm.border};">
+          <div style="margin-top:10px;">
+            <div style="font-size:10px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Trigger</div>
+            <div style="font-size:11px; color:var(--text);">${t.trigger}</div>
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:10px; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">CLS Calls</div>
+            ${clsHtml}
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:10px; font-weight:700; color:var(--green); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Work Items</div>
+            ${wiHtml}
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:10px; font-weight:700; color:#c084fc; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Relay Events</div>
+            ${relayHtml}
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:10px; font-weight:700; color:#fb923c; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Notifications</div>
+            ${notifHtml}
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:10px; font-weight:700; color:var(--yellow); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Downstream Effects</div>
+            ${downHtml}
+          </div>
+          ${notesHtml}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+const transEl = document.getElementById('miniorq-transitions');
+if (transEl) {
+  transEl.innerHTML = PI_TRANSITIONS.map(renderTransitionCard).join('');
+}
+
+const wiBody = document.getElementById('miniorq-workitems-body');
+if (wiBody) {
+  wiBody.innerHTML = WORK_ITEM_TEMPLATES.map(w => `
+    <tr>
+      <td style="font-size:11px; color:var(--accent); white-space:nowrap;">${w.transition}</td>
+      <td style="font-size:11px; color:var(--green);">${w.title}</td>
+      <td><code style="font-size:10px; color:var(--cyan);">${w.kind}</code></td>
+      <td style="font-size:10px; color:var(--text-dim);">${w.meta}</td>
+    </tr>
+  `).join('');
+}
+
+})();
 
 // ═══════════════════════════════════════════════
 // INSTANT QUOTES TAB
