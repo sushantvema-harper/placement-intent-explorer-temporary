@@ -290,6 +290,28 @@
   .scenario-btn:hover { border-color: var(--accent); }
   .scenario-btn.active { background: var(--accent-dim); border-color: var(--accent); }
 
+  .version-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+  }
+
+  .version-toggle button {
+    padding: 6px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+
+  .version-toggle button:first-child { border-radius: 6px 0 0 6px; }
+  .version-toggle button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+  .version-toggle button.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
   .timeline {
     max-width: 700px;
   }
@@ -586,6 +608,7 @@
   <div class="tab" data-panel="email-classifications">Email Classifications</div>
   <div class="tab" data-panel="work-items">Work Items</div>
   <div class="tab" data-panel="harper-claw">Harper-Claw</div>
+  <div class="tab" data-panel="miniorq">MiniOrq (Agora)</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -893,6 +916,10 @@
     Each step shows entity IDs, dollar amounts, and the exact state transitions.
   </p>
 
+  <div class="version-toggle" id="scenario-version-toggle">
+    <button data-version="v1">v1 scenarios</button>
+    <button data-version="v2" class="active">v2 scenarios</button>
+  </div>
   <div class="scenario-list" id="scenario-buttons"></div>
 
   <div style="display:flex; gap:32px; align-items:flex-start;">
@@ -1148,6 +1175,64 @@
   <div style="margin-top:16px; padding:16px; background:rgba(248,113,113,0.06); border:1px solid rgba(248,113,113,0.2); border-radius:8px;">
     <h3 style="font-size:14px; color:var(--red); margin-bottom:8px;">What Harper-Claw Does NOT Do</h3>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:var(--text-dim);" id="hc-not-do"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 10: MiniOrq (Agora)                  -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-miniorq">
+  <!-- Section 1: Architecture Overview -->
+  <h2 style="font-size:16px; margin-bottom:8px;">Placements MiniOrq — Agora as Orchestrator</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
+    Agora acts as a "MiniOrq" (mini orchestrator) for placement transitions: it consumes signals from multiple sources,
+    resolves the target placement intent, determines the correct state transition, and calls the CLS API to execute it.
+    CLS remains the single source of truth for state; Agora is the decision-maker.
+  </p>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
+    Architecture: Signal Source → <strong>MiniOrq / Agora</strong> → CLS → Relay outbox
+  </p>
+
+  <!-- Three-layer architecture diagram -->
+  <div id="miniorq-arch" style="display:flex; gap:16px; margin-bottom:32px; flex-wrap:wrap;"></div>
+
+  <!-- Section 2: Signal Sources -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Signal Sources</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Click a card to expand details about each signal source that feeds into MiniOrq.
+  </p>
+  <div id="miniorq-signals" style="display:flex; flex-direction:column; gap:8px; max-width:900px; margin-bottom:32px;"></div>
+
+  <!-- Section 3: Sequence Diagrams -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Operational Sequence Flows</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Step-by-step flows showing exact API calls and data flow for each placement orchestration scenario.
+    Click a flow to expand/collapse.
+  </p>
+  <div id="miniorq-flows" style="display:flex; flex-direction:column; gap:12px; max-width:1000px; margin-bottom:32px;"></div>
+
+  <!-- Section 4: CLS API Reference -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">CLS API Reference (MiniOrq Endpoints)</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    The specific CLS endpoints MiniOrq calls during placement orchestration.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:32px;">
+    <table class="rules-table" style="max-width:900px;">
+      <thead><tr><th>API</th><th>Method</th><th>Endpoint</th><th>When</th></tr></thead>
+      <tbody id="miniorq-api-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Section 5: Relay Topics Reference -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Relay Topics Reference</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Event bus topics relevant to MiniOrq placement orchestration.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:24px;">
+    <table class="rules-table" style="max-width:900px;">
+      <thead><tr><th>Topic</th><th>Direction</th><th>Events</th><th>Consumer Group</th></tr></thead>
+      <tbody id="miniorq-topics-body"></tbody>
+    </table>
   </div>
 </div>
 
@@ -2444,6 +2529,245 @@ const SCENARIOS = [
 ];
 
 // ═══════════════════════════════════════════════
+// V2 SCENARIOS (using PIv2 states)
+// ═══════════════════════════════════════════════
+const SCENARIOS_V2 = [
+  {
+    name: '1. Happy Path — Single Carrier',
+    desc: 'Bright Horizons Daycare Center • General Liability • RT Specialty (Shannon Hurst)',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Agora dispatches GL submission to RT Specialty',
+        detail: 'Opp 488401 | OLI 42801 (General Liability, $1M/$2M occ/agg)\nPacket: ACORD 125+126, 3 supplementals, loss runs\nUW: Shannon Hurst (shannon.hurst@rtspecialty.com)\nRFQ #3201 created → RFQLI #8801 → PI #16801',
+        states: { 'SI (OLI 42801)': 'submitted', 'PI #16801': 'submitted', 'RFQLI #8801': 'submitted', 'RFQ #3201': 'submitted' }
+      },
+      {
+        day: 'Day 1',
+        event: 'Shannon @ RT Specialty: "Received, under review"',
+        detail: 'Email auto-classified: acknowledgment\nPI transitions to acknowledged — carrier confirmed receipt',
+        states: { 'SI (OLI 42801)': 'submitted', 'PI #16801': 'acknowledged', 'RFQLI #8801': 'submitted', 'RFQ #3201': 'submitted' }
+      },
+      {
+        day: 'Day 2',
+        event: 'Shannon begins active review of the submission',
+        detail: 'Carrier signals active review — PI moves to under_review\nBall is in carrier\'s court',
+        states: { 'PI #16801': 'under_review', 'RFQLI #8801': 'under_review', 'RFQ #3201': 'submitted' }
+      },
+      {
+        day: 'Day 3',
+        event: 'Shannon: "Please send 3 years of audited loss runs"',
+        detail: 'Email classified: info_requested\nBlocker type: customer (we need docs from the insured)\nPI → info_requested — creates work item for operator\nOperator drafts email to Bright Horizons requesting loss runs',
+        states: { 'PI #16801': 'info_requested', 'RFQLI #8801': 'info_requested', 'RFQ #3201': 'submitted', 'Blocker': 'customer' }
+      },
+      {
+        day: 'Day 5',
+        event: 'Bright Horizons sends loss runs → Harper forwards to Shannon',
+        detail: 'Docs uploaded to Aether, linked to packet\nBlocker resolved — PI returns to under_review\nBall back in carrier\'s court',
+        states: { 'PI #16801': 'under_review', 'RFQLI #8801': 'under_review', 'RFQ #3201': 'submitted', 'Blocker': 'resolved' }
+      },
+      {
+        day: 'Day 10',
+        event: 'Shannon quotes GL: $3,500/yr ($1M occ / $2M agg)',
+        detail: 'Quote #5401 created (type: full_quote)\nQuote.status → pending_validation\nPI transitions → quote_received\nQuote needs validation before it can be approved',
+        states: { 'PI #16801': 'quote_received', 'RFQLI #8801': 'quoted', 'RFQ #3201': 'completed', 'Quote #5401': 'pending_validation' }
+      },
+      {
+        day: 'Day 10',
+        event: 'Quote validated — limits match, premium reasonable, terms correct',
+        detail: 'System + operator validation passes\nPI → approved_quote (positive terminal)\nQuote #5401 → validated\nProcess Manager advances CI: placement → sales phase\nMegaBro /placements shows: "Approved — $3,500"',
+        states: { 'PI #16801': 'approved_quote', 'RFQLI #8801': 'quoted', 'RFQ #3201': 'completed', 'Quote #5401': 'validated' }
+      },
+    ]
+  },
+  {
+    name: '2. Multi-Carrier Mixed — Trucking GL',
+    desc: 'Mountain West Logistics (Opp 489102) • Commercial Auto + GL • 3 wholesalers',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched to 3 wholesalers for GL ($2M/$4M)',
+        detail: 'OLI 43010 (Commercial General Liability)\nRFQ #3301 → RT Specialty (Shannon Hurst) → RFQLI #8901 → PI #16901\nRFQ #3302 → AmWins (David Park) → RFQLI #8902 → PI #16902\nRFQ #3303 → USLI (Jennifer Walsh) → RFQLI #8903 → PI #16903\nAll packets include: ACORD 125/126, fleet schedule, driver MVRs, 5yr loss runs',
+        states: { 'PI #16901 (RT)': 'submitted', 'PI #16902 (AmWins)': 'submitted', 'PI #16903 (USLI)': 'submitted' }
+      },
+      {
+        day: 'Day 2',
+        event: 'Jennifer @ USLI: "We don\'t write long-haul trucking in CO"',
+        detail: 'Email classified: quote_declined\nDeclination category: state_restriction\nPI #16903 → declined (terminal)\nRFQLI #8903 derives → declined',
+        states: { 'PI #16901 (RT)': 'submitted', 'PI #16902 (AmWins)': 'submitted', 'PI #16903 (USLI)': 'declined' }
+      },
+      {
+        day: 'Day 4',
+        event: 'David @ AmWins: "Need updated MVRs for drivers Johnson & Reyes"',
+        detail: 'Email classified: info_requested\nBlocker: customer (need docs from Mountain West)\nPI #16902 → info_requested\nOperator requests MVRs from insured',
+        states: { 'PI #16901 (RT)': 'under_review', 'PI #16902 (AmWins)': 'info_requested', 'PI #16903 (USLI)': 'declined', 'Blocker (AmWins)': 'customer' }
+      },
+      {
+        day: 'Day 7',
+        event: 'Shannon @ RT Specialty: price indication $11,000-$13,000/yr',
+        detail: 'Not a formal quote yet — price_indication only\nRFQLI #8901 → price_indication ($11K-$13K)\nPI #16901 → price_indication\nGood signal — RT is engaged and working the risk',
+        states: { 'PI #16901 (RT)': 'price_indication', 'PI #16902 (AmWins)': 'info_requested', 'PI #16903 (USLI)': 'declined', 'RT indication': '$11K-$13K' }
+      },
+      {
+        day: 'Day 9',
+        event: 'Mountain West sends updated MVRs → forwarded to David @ AmWins',
+        detail: 'Docs uploaded to Aether, linked to RFQ #3302\nBlocker resolved — PI #16902 returns to under_review\nBall in AmWins\' court',
+        states: { 'PI #16901 (RT)': 'price_indication', 'PI #16902 (AmWins)': 'under_review', 'PI #16903 (USLI)': 'declined', 'Blocker (AmWins)': 'resolved' }
+      },
+      {
+        day: 'Day 10',
+        event: 'Shannon @ RT quotes GL: $12,150/yr ($2M occ / $4M agg)',
+        detail: 'Quote #5501 (type: full_quote, carrier: Travelers)\nPI #16901 → quote_received\nValidation pending — need to check terms match RFQ\nFirst formal quote in from any carrier',
+        states: { 'PI #16901 (RT)': 'quote_received', 'PI #16902 (AmWins)': 'under_review', 'PI #16903 (USLI)': 'declined', 'Quote (RT)': '$12,150' }
+      },
+      {
+        day: 'Day 10',
+        event: 'RT quote validated and approved',
+        detail: 'Quote #5501 passes validation\nPI #16901 → approved_quote (terminal)\nFirst approved quote — operator can see it on MegaBro\nStill waiting on AmWins for a second option',
+        states: { 'PI #16901 (RT)': 'approved_quote', 'PI #16902 (AmWins)': 'under_review', 'PI #16903 (USLI)': 'declined', 'Quote (RT)': '$12,150 ✓' }
+      },
+      {
+        day: 'Day 12',
+        event: 'David @ AmWins quotes GL: $9,800/yr (Hartford) — better price!',
+        detail: 'Quote #5502 (type: full_quote, carrier: Hartford)\nPI #16902 → quote_received → validated → approved_quote\nNow 2 approved quotes to compare: RT $12,150 vs AmWins $9,800\nOperator sees "2 approved, 1 declined" on /placements',
+        states: { 'PI #16901 (RT)': 'approved_quote', 'PI #16902 (AmWins)': 'approved_quote', 'PI #16903 (USLI)': 'declined', 'Best quote': '$9,800 (AmWins/Hartford)' }
+      },
+    ]
+  },
+  {
+    name: '3. All Declined → Remarketing',
+    desc: 'Pho King Delicious (Restaurant LLC, Opp 487220) • Professional Liability • Hiscox + Coterie',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched PL ($1M/$1M) to Hiscox and Coterie',
+        detail: 'OLI 42650 (Professional Liability)\nRFQ #3501 → Hiscox (direct portal, instant_quote channel) → RFQLI #9001 → PI #17001\nRFQ #3502 → Coterie (API, coverforce_api channel) → RFQLI #9002 → PI #17002\nBoth are instant-quote channels — expect fast responses',
+        states: { 'PI #17001 (Hiscox)': 'submitted', 'PI #17002 (Coterie)': 'submitted', 'CI (OLI 42650)': 'placement' }
+      },
+      {
+        day: 'Day 1',
+        event: 'Hiscox portal returns: DECLINED — "loss history too severe"',
+        detail: 'Instant decline via API response\nDeclination category: loss_history\n2 claims in past 3 years totaling $45K\nPI #17001 → declined (terminal)',
+        states: { 'PI #17001 (Hiscox)': 'declined', 'PI #17002 (Coterie)': 'submitted', 'RFQLI #9001': 'declined (loss_history)' }
+      },
+      {
+        day: 'Day 3',
+        event: 'Coterie API returns: DECLINED — "class of business not in appetite"',
+        detail: 'Declination category: class_of_business\nCoterie doesn\'t write restaurants with liquor exposure\nPI #17002 → declined (terminal)\nALL PIs for OLI 42650 are now declined!',
+        states: { 'PI #17001 (Hiscox)': 'declined', 'PI #17002 (Coterie)': 'declined', 'OLI 42650': 'ALL DECLINED' }
+      },
+      {
+        day: 'Day 3',
+        event: 'MegaBro shows: "All Declined — Eligible for Remarketing"',
+        detail: 'Operator reviews decline reasons on /placements:\n• Hiscox: loss_history (claims too severe)\n• Coterie: class_of_business (restaurant + liquor)\nDecision: try E&S / specialty market instead of admitted carriers',
+        states: { 'PI #17001': 'declined', 'PI #17002': 'declined', 'Operator action': 'Evaluate remarket' }
+      },
+      {
+        day: 'Day 4',
+        event: 'Operator clicks "Remarket" → PI #17001 and #17002 transition to remarketing',
+        detail: 'Both PIs → remarketing (terminal — closes out these placement attempts)\nCLS Process Manager backtracks: CI placement → submission\nNew SubmissionIntent created (type: remarketing, prior_si references original)\nAgora generates new packet targeting E&S wholesalers:\nRFQ #3601 → Burns & Wilcox (brokered) → RFQLI #9101 → PI #17101\nRFQ #3602 → CRC Group (brokered) → RFQLI #9102 → PI #17102',
+        states: { 'PI #17001': 'remarketing', 'PI #17002': 'remarketing', 'New PI #17101 (B&W)': 'submitted', 'New PI #17102 (CRC)': 'submitted', 'CI': 'placement (round 2)' }
+      },
+    ]
+  },
+  {
+    name: '4. Quote Validation Failure → Rework',
+    desc: 'Cascade Plumbing Services (Opp 490100) • Workers\' Comp • CNA via RT Specialty',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched WC to RT Specialty for CNA placement',
+        detail: 'OLI 43400 (Workers\' Compensation, Class Code 5183 — Plumbing)\nRFQ #4001 → RT Specialty (Shannon Hurst) → RFQLI #9501 → PI #17601\nPacket: ACORD 125/130, payroll schedule, 3yr loss runs, experience mod worksheet',
+        states: { 'PI #17601': 'submitted', 'RFQLI #9501': 'submitted', 'RFQ #4001': 'submitted' }
+      },
+      {
+        day: 'Day 1',
+        event: 'Shannon @ RT acknowledges receipt',
+        detail: 'Email auto-classified: acknowledgment\nPI → acknowledged — carrier has the packet',
+        states: { 'PI #17601': 'acknowledged', 'RFQLI #9501': 'submitted' }
+      },
+      {
+        day: 'Day 4',
+        event: 'Shannon begins underwriting — moves to active review',
+        detail: 'PI → under_review\nCNA UW team evaluating loss history and class code exposure',
+        states: { 'PI #17601': 'under_review', 'RFQLI #9501': 'under_review' }
+      },
+      {
+        day: 'Day 8',
+        event: 'Shannon quotes WC: $14,200/yr — but quote lists wrong class code',
+        detail: 'Quote #6001 created (type: full_quote)\nPI → quote_received\nQuote.status → pending_validation\nQuote lists class code 5187 (Gas Piping) instead of 5183 (Plumbing)\nLimits and experience mod look correct, but class code is wrong',
+        states: { 'PI #17601': 'quote_received', 'RFQLI #9501': 'quoted', 'Quote #6001': 'pending_validation', 'Issue': 'wrong class code (5187 vs 5183)' }
+      },
+      {
+        day: 'Day 8',
+        event: 'Validation fails — class code mismatch detected',
+        detail: 'System validation catches: requested class 5183 but quote has 5187\nQuote #6001 status → invalid\nPI → disqualified_quote (terminal)\nThis isn\'t a decline — carrier said yes, but the quote is unusable as-is',
+        states: { 'PI #17601': 'disqualified_quote', 'Quote #6001': 'invalid', 'Reason': 'class code mismatch' }
+      },
+      {
+        day: 'Day 9',
+        event: 'Operator triggers rework — go back to carrier with correction',
+        detail: 'Operator reviews the disqualified quote and determines it\'s fixable\nPI → rework (terminal — closes this PI)\nNew PI #17701 created for the corrected submission\nOperator emails Shannon: "Quote has wrong class code — should be 5183 not 5187"\nNew RFQLI #9601 → PI #17701 starts at submitted',
+        states: { 'PI #17601': 'rework', 'New PI #17701': 'submitted', 'New RFQLI #9601': 'submitted', 'Action': 'correction sent to RT' }
+      },
+      {
+        day: 'Day 11',
+        event: 'Shannon sends corrected quote: $13,800/yr with correct class code 5183',
+        detail: 'Quote #6002 created (type: full_quote, class code 5183)\nNew PI #17701 → quote_received → validated → approved_quote\nSlightly lower premium with correct class code\nRework successful — placement can proceed',
+        states: { 'New PI #17701': 'approved_quote', 'Quote #6002': 'validated ($13,800)', 'Old PI #17601': 'rework (closed)' }
+      },
+    ]
+  },
+  {
+    name: '5. Instant Quote vs Brokered',
+    desc: 'Greenfield Landscaping (Opp 489801) • Workers\' Comp • Pie Insurance (portal) + AmTrust via AmWins (brokered)',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched WC to 2 channels simultaneously',
+        detail: 'OLI 43200 (Workers\' Compensation, Class Code 0042 — Landscaping)\nRFQ #3801 → Pie Insurance (channel: instant_quote_portal) → RFQLI #9301 → PI #17301\nRFQ #3802 → AmWins/AmTrust (channel: brokered) → RFQLI #9302 → PI #17302\nSame coverage, different placement routes',
+        states: { 'PI #17301 (Pie)': 'submitted', 'PI #17302 (AmWins)': 'submitted', 'RFQ #3801': 'submitted', 'RFQ #3802': 'submitted' }
+      },
+      {
+        day: 'Day 0',
+        event: 'Pie Insurance portal returns instant quote: $8,200/yr',
+        detail: 'Near-instant response from portal API\nQuote #5801 (type: full_quote)\nPI #17301 → quote_received within minutes\nNo acknowledged/under_review — portals skip straight to quote',
+        states: { 'PI #17301 (Pie)': 'quote_received', 'PI #17302 (AmWins)': 'submitted', 'Quote (Pie)': '$8,200 (instant)' }
+      },
+      {
+        day: 'Day 0',
+        event: 'Pie quote validated and approved immediately',
+        detail: 'System validation passes — portal quotes have structured data\nPI #17301 → approved_quote (terminal)\nInstant: submitted → quote_received → approved_quote in minutes\nBrokered channel still at submitted — hasn\'t even been acknowledged yet',
+        states: { 'PI #17301 (Pie)': 'approved_quote', 'PI #17302 (AmWins)': 'submitted', 'Quote (Pie)': '$8,200 (approved)' }
+      },
+      {
+        day: 'Day 5',
+        event: 'AmWins acknowledges and asks for 5yr payroll breakdown by class code',
+        detail: 'Email from Mark @ AmWins: "Need payroll data split by job type"\nPI #17302 → info_requested\nBlocker: customer (need data from Greenfield)\nBrokered is slower but may find a better rate',
+        states: { 'PI #17301 (Pie)': 'approved_quote', 'PI #17302 (AmWins)': 'info_requested', 'Blocker (AmWins)': 'customer', 'Quote (Pie)': '$8,200' }
+      },
+      {
+        day: 'Day 8',
+        event: 'Customer provides payroll data → forwarded to AmWins',
+        detail: 'Docs submitted, blocker clears\nPI #17302 → under_review\nNow waiting on AmTrust UW team',
+        states: { 'PI #17301 (Pie)': 'approved_quote', 'PI #17302 (AmWins)': 'under_review', 'Blocker (AmWins)': 'resolved' }
+      },
+      {
+        day: 'Day 11',
+        event: 'AmWins/AmTrust quotes WC: $6,900/yr — $1,300 cheaper than Pie',
+        detail: 'Quote #5802 (type: full_quote)\nAmTrust E-mod applied: 0.92 (favorable)\nPI #17302 → quote_received\nNow 2 quotes: Pie $8,200 (approved, instant) vs AmTrust $6,900 (pending validation)',
+        states: { 'PI #17301 (Pie)': 'approved_quote', 'PI #17302 (AmWins)': 'quote_received', 'Quote (Pie)': '$8,200', 'Quote (AmTrust)': '$6,900' }
+      },
+      {
+        day: 'Day 11',
+        event: 'AmTrust quote validated and approved — better price confirmed',
+        detail: 'Quote #5802 passes validation, PI #17302 → approved_quote\nNow 2 approved quotes to compare:\n• Pie Insurance: $8,200 (instant, admitted)\n• AmTrust via AmWins: $6,900 (brokered, admitted, better e-mod)\nTradeoff: Pie was instant (approved Day 0), AmWins took 11 days but saved $1,300/yr',
+        states: { 'PI #17301 (Pie)': 'approved_quote', 'PI #17302 (AmWins)': 'approved_quote', 'Quote (Pie)': '$8,200', 'Quote (AmTrust)': '$6,900 ← better' }
+      },
+    ]
+  },
+];
+
 // ═══════════════════════════════════════════════
 // HELPER: Universal state type lookup across all machines
 // ═══════════════════════════════════════════════
@@ -2452,6 +2776,8 @@ function getStateType(val) {
   for (const m of Object.values(MACHINES)) {
     if (m.stateTypes && m.stateTypes[val]) return m.stateTypes[val];
   }
+  // Also check PIV2 (standalone machine, not in MACHINES)
+  if (PIV2.stateTypes && PIV2.stateTypes[val]) return PIV2.stateTypes[val];
   // Heuristic fallback for non-state values (like dollar amounts, labels, etc.)
   if (/^\$/.test(val) || /\d/.test(val)) return 'active';
   if (/declined|lost|cancel|failed|invalid|withdrawn|abandoned|disqualified/.test(val)) return 'terminal';
@@ -3168,10 +3494,17 @@ buildPIV2SVG();
 // ═══════════════════════════════════════════════
 let currentScenario = null;
 let currentStep = -1;
+let currentScenarioVersion = 'v2'; // default to v2
+
+function getActiveScenarios() {
+  return currentScenarioVersion === 'v2' ? SCENARIOS_V2 : SCENARIOS;
+}
 
 function buildScenarioButtons() {
   const container = document.getElementById('scenario-buttons');
-  SCENARIOS.forEach((s, i) => {
+  container.innerHTML = '';
+  const scenarios = getActiveScenarios();
+  scenarios.forEach((s, i) => {
     const btn = document.createElement('button');
     btn.className = 'scenario-btn';
     btn.textContent = s.name;
@@ -3181,10 +3514,27 @@ function buildScenarioButtons() {
   });
 }
 
+function switchScenarioVersion(version) {
+  currentScenarioVersion = version;
+  currentScenario = null;
+  currentStep = -1;
+  // Update toggle buttons
+  document.querySelectorAll('#scenario-version-toggle button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.version === version);
+  });
+  // Rebuild scenario buttons for new version
+  buildScenarioButtons();
+  // Clear timeline and state panel
+  document.getElementById('scenario-timeline').innerHTML = '';
+  document.getElementById('scenario-state-body').innerHTML = 'Select a scenario to begin.';
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').disabled = true;
+}
+
 function loadScenario(idx) {
   currentScenario = idx;
   currentStep = -1;
-  const s = SCENARIOS[idx];
+  const s = getActiveScenarios()[idx];
 
   // Update buttons
   document.querySelectorAll('.scenario-btn').forEach((b, i) => {
@@ -3225,7 +3575,7 @@ function loadScenario(idx) {
 
 function advanceScenario() {
   if (currentScenario === null) return;
-  const s = SCENARIOS[currentScenario];
+  const s = getActiveScenarios()[currentScenario];
   if (currentStep >= s.steps.length - 1) return;
   currentStep++;
   updateScenarioDisplay();
@@ -3242,7 +3592,7 @@ function resetScenario() {
 }
 
 function updateScenarioDisplay() {
-  const s = SCENARIOS[currentScenario];
+  const s = getActiveScenarios()[currentScenario];
   document.querySelectorAll('.timeline-step').forEach((el, i) => {
     el.classList.toggle('visible', i < currentStep);
     el.classList.toggle('current', i === currentStep);
@@ -3258,7 +3608,7 @@ function updateScenarioState() {
     body.innerHTML = 'Select a scenario to begin.';
     return;
   }
-  const step = SCENARIOS[currentScenario].steps[currentStep];
+  const step = getActiveScenarios()[currentScenario].steps[currentStep];
   body.innerHTML = Object.entries(step.states).map(([k, v]) => {
     const type = getStateType(v);
     return `<div class="field"><span class="key">${k}</span><span class="badge ${type}">${v}</span></div>`;
@@ -3269,6 +3619,9 @@ buildScenarioButtons();
 document.getElementById('btn-next').addEventListener('click', advanceScenario);
 document.getElementById('btn-prev').addEventListener('click', rewindScenario);
 document.getElementById('btn-reset').addEventListener('click', resetScenario);
+document.querySelectorAll('#scenario-version-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => switchScenarioVersion(btn.dataset.version));
+});
 
 // ═══════════════════════════════════════════════
 // MATERIALIZATION PANEL
@@ -4475,6 +4828,324 @@ function buildHarperClaw() {
 }
 
 buildHarperClaw();
+
+// ═══════════════════════════════════════════════
+// MINIORQ (AGORA) PANEL
+// ═══════════════════════════════════════════════
+
+const MINIORQ_ARCH_LAYERS = [
+  {
+    title: 'Signal Sources',
+    color: 'var(--orange)',
+    items: [
+      'Relay lifecycle events (CLS transitions)',
+      'Zephyrus email classifications (comms.*)',
+      'Operator actions (MegaBro → CLS)',
+      'Harper-claw signals (future)'
+    ]
+  },
+  {
+    title: 'MiniOrq / Agora',
+    color: 'var(--accent)',
+    items: [
+      '1. Consume signal',
+      '2. Look up current state',
+      '3. Decide transition target',
+      '4. Call CLS transition API',
+      '5. Emit side-effect events'
+    ]
+  },
+  {
+    title: 'CLS',
+    color: 'var(--green)',
+    items: [
+      'Validate transition legality',
+      'Update entity state',
+      'Derive dependent statuses (RFQLI, OLI)',
+      'Emit to Relay outbox'
+    ]
+  }
+];
+
+const MINIORQ_SIGNALS = [
+  {
+    id: 'relay-lifecycle',
+    title: 'Relay relay.lifecycle topic',
+    subtitle: 'CLS → Agora',
+    color: 'var(--accent)',
+    summary: 'CLS emits lifecycle.entity.transitioned events whenever any entity changes state. Agora consumes these for side effects and cascading logic.',
+    details: [
+      { label: 'Consumer group', value: 'agora-consumer' },
+      { label: 'Message type', value: 'lifecycle.entity.transitioned' },
+      { label: 'Schema', value: '{transition_id, entity_type, entity_id, from_status, to_status, triggered_by, opportunity_id, occurred_at}' },
+      { label: 'Currently handled', value: 'coverage_intent (intake→submission), submission_intent (→cancelled), placement_intent (→cancelled)' },
+      { label: 'NEW for MiniOrq', value: 'placement_intent ALL transitions, rfq_line_item transitions' }
+    ]
+  },
+  {
+    id: 'zephyrus-emails',
+    title: 'Zephyrus Email Classifications',
+    subtitle: 'via Relay comms.* topics',
+    color: 'var(--purple)',
+    summary: 'Zephyrus processes inbound emails through its Bronze→Silver pipeline and emits classifications that trigger PI transitions.',
+    details: [
+      { label: 'comms.quote', value: 'INSURANCE_QUOTE, INSURANCE_DECLINE, QUOTE_REJECTED' },
+      { label: 'comms.placement', value: 'SUBMISSION, SUBMISSION_TO_QUOTE' },
+      { label: 'Schema', value: 'Email classification with matched_opportunity_id, matched_company_id, classification_raw' },
+      { label: 'Key role', value: 'These are the primary signals that trigger PI transitions in the automated flow' }
+    ]
+  },
+  {
+    id: 'operator-actions',
+    title: 'Operator Actions',
+    subtitle: 'MegaBro → CLS → Relay',
+    color: 'var(--green)',
+    summary: 'Operators click buttons on the MegaBro /placements page. MegaBro calls CLS directly; Agora consumes the resulting transition event for side effects.',
+    details: [
+      { label: 'Flow', value: 'Operator clicks button → MegaBro calls CLS transition API → CLS validates + updates → CLS emits to Relay → Agora consumes for side effects' },
+      { label: 'Key point', value: 'Agora does NOT initiate these transitions — it only reacts to them' },
+      { label: 'Side effects', value: 'Suppress pending tasks, update dashboards, trigger notifications' }
+    ]
+  },
+  {
+    id: 'harper-claw',
+    title: 'Harper-Claw Signals',
+    subtitle: 'Future — NOT YET IMPLEMENTED',
+    color: 'var(--yellow)',
+    summary: 'Harper-claw will emit structured signals to a Relay topic. MiniOrq will consume these and call CLS. Loosely coupled design — harper-claw never calls CLS directly.',
+    details: [
+      { label: 'Topic', value: 'TBD (e.g., placement.signals)' },
+      { label: 'Signals', value: 'placement.quote_received, placement.quote_declined, placement.info_requested' },
+      { label: 'Design principle', value: 'Harper-claw emits intent signals; MiniOrq resolves them to CLS transitions. This keeps harper-claw decoupled from CLS API changes.' },
+      { label: 'Status', value: 'NOT YET IMPLEMENTED — design only' }
+    ]
+  }
+];
+
+const MINIORQ_FLOWS = [
+  {
+    id: 'quote-received',
+    title: 'Flow 1: Quote Received (Email → PI Transition)',
+    description: 'An insurance quote email arrives and triggers PI state change to quote_received.',
+    steps: [
+      { num: 1, text: 'Email arrives in Gmail from carrier underwriter', type: 'external' },
+      { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email (extraction, enrichment)', type: 'external' },
+      { num: 3, text: 'Hermes classifies email: INSURANCE_QUOTE', type: 'external' },
+      { num: 4, text: 'Zephyrus emits to Relay: comms.quote + comms.email topics', type: 'relay' },
+      { num: 5, text: 'MiniOrq (Agora) consumes comms.quote event', type: 'internal' },
+      { num: 6, text: 'MiniOrq extracts: matched_opportunity_id, classification_raw.quote_details', type: 'internal' },
+      { num: 7, text: 'MiniOrq queries CLS: GET /opportunities/{opp_id}/rfqs → find matching RFQ by carrier/UW', type: 'cls' },
+      { num: 8, text: 'MiniOrq queries CLS: GET /rfqs/{rfq_id}/items → find RFQLI for this coverage', type: 'cls' },
+      { num: 9, text: 'MiniOrq looks up PI for this RFQLI: GET /placements/{pi_id}', type: 'cls' },
+      { num: 10, text: 'MiniOrq determines target state: submitted/under_review → quote_received', type: 'internal' },
+      { num: 11, text: 'MiniOrq calls CLS: POST /placements/{pi_id}/transition {status: "quote_received"}', type: 'cls' },
+      { num: 12, text: 'CLS validates transition, updates PI, derives RFQLI status, emits to Relay outbox', type: 'cls' },
+      { num: 13, text: 'Quote entity created: POST /quotes {account_id, opportunity_id, ...quote_details}', type: 'cls' }
+    ]
+  },
+  {
+    id: 'carrier-decline',
+    title: 'Flow 2: Carrier Decline (Email → PI Declined)',
+    description: 'Carrier sends a decline email, triggering PI transition to declined state.',
+    steps: [
+      { num: 1, text: 'Email arrives in Gmail — carrier decline notice', type: 'external' },
+      { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email', type: 'external' },
+      { num: 3, text: 'Hermes classifies email: INSURANCE_DECLINE', type: 'external' },
+      { num: 4, text: 'Zephyrus emits to Relay: comms.quote topic (category: INSURANCE_DECLINE)', type: 'relay' },
+      { num: 5, text: 'MiniOrq (Agora) consumes comms.quote event', type: 'internal' },
+      { num: 6, text: 'MiniOrq extracts decline reason from classification_raw', type: 'internal' },
+      { num: 7, text: 'MiniOrq queries CLS: GET /opportunities/{opp_id}/rfqs → match RFQ', type: 'cls' },
+      { num: 8, text: 'MiniOrq queries CLS: GET /rfqs/{rfq_id}/items → find RFQLI', type: 'cls' },
+      { num: 9, text: 'MiniOrq looks up PI: GET /placements/{pi_id}', type: 'cls' },
+      { num: 10, text: 'MiniOrq determines target state: → declined', type: 'internal' },
+      { num: 11, text: 'MiniOrq calls CLS: POST /placements/{pi_id}/transition {status: "declined"}', type: 'cls' },
+      { num: 12, text: 'CLS checks if ALL PIs for this OLI are declined → if so, flags for remarketing', type: 'cls' }
+    ]
+  },
+  {
+    id: 'operator-pause',
+    title: 'Flow 3: Operator Pause (Manual → PI on_hold)',
+    description: 'Operator manually pauses a placement intent via MegaBro dashboard.',
+    steps: [
+      { num: 1, text: 'Operator clicks "Pause" on MegaBro /placements page', type: 'external' },
+      { num: 2, text: 'MegaBro calls CLS: POST /placements/{pi_id}/transition {status: "on_hold"}', type: 'cls' },
+      { num: 3, text: 'CLS validates transition, updates PI, emits to Relay outbox', type: 'cls' },
+      { num: 4, text: 'MiniOrq (Agora) consumes transition event from relay.lifecycle', type: 'relay' },
+      { num: 5, text: 'MiniOrq side effect: suppress any pending follow-up tasks for this PI', type: 'internal' }
+    ]
+  },
+  {
+    id: 'info-requested',
+    title: 'Flow 4: Info Requested (Email → PI info_requested)',
+    description: 'Underwriter asks for additional documents, triggering info_requested state and a work item.',
+    steps: [
+      { num: 1, text: 'Email arrives in Gmail — UW requests additional documents', type: 'external' },
+      { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email', type: 'external' },
+      { num: 3, text: 'Hermes classifies email: SUBMISSION_TO_QUOTE', type: 'external' },
+      { num: 4, text: 'Zephyrus emits to Relay: comms.placement topic', type: 'relay' },
+      { num: 5, text: 'MiniOrq (Agora) consumes comms.placement event', type: 'internal' },
+      { num: 6, text: 'MiniOrq determines: UW is asking for documents (sub-classification)', type: 'internal' },
+      { num: 7, text: 'MiniOrq queries CLS: GET /opportunities/{opp_id}/rfqs → match RFQ', type: 'cls' },
+      { num: 8, text: 'MiniOrq queries CLS: GET /rfqs/{rfq_id}/items → find RFQLI', type: 'cls' },
+      { num: 9, text: 'MiniOrq looks up PI: GET /placements/{pi_id}', type: 'cls' },
+      { num: 10, text: 'MiniOrq calls CLS: POST /placements/{pi_id}/transition {status: "info_requested"}', type: 'cls' },
+      { num: 11, text: 'Create work_item (task): "Provide [docs] to [carrier]" for operator follow-up', type: 'internal' }
+    ]
+  },
+  {
+    id: 'quote-validation',
+    title: 'Flow 5: Quote Validation (PI quote_received → approved_quote)',
+    description: 'After quote receipt, the validation and approval flow that advances PI to approved_quote.',
+    steps: [
+      { num: 1, text: 'PI is in quote_received state; Quote entity exists with extracted terms', type: 'internal' },
+      { num: 2, text: 'System validation runs (automated extraction checks on quote details)', type: 'internal' },
+      { num: 3, text: 'POST /quotes/{quote_id}/transition {status: "pending_decision"} — passes validation', type: 'cls' },
+      { num: 4, text: 'Operator reviews quote on MegaBro dashboard, approves it', type: 'external' },
+      { num: 5, text: 'POST /quotes/{quote_id}/transition {status: "selected"} — operator approval', type: 'cls' },
+      { num: 6, text: 'MiniOrq detects quote selected → POST /placements/{pi_id}/transition {status: "approved_quote"}', type: 'cls' },
+      { num: 7, text: 'CLS Process Manager advances Coverage Intent: placement → sales phase', type: 'cls' }
+    ]
+  }
+];
+
+const MINIORQ_CLS_APIS = [
+  { api: 'Get RFQs', method: 'GET', endpoint: '/opportunities/{opp_id}/rfqs', when: 'Map email to RFQ by carrier/UW match' },
+  { api: 'Get RFQLI', method: 'GET', endpoint: '/rfqs/{rfq_id}/items', when: 'Find coverage line item for this RFQ' },
+  { api: 'Get PI', method: 'GET', endpoint: '/placements/{pi_id}', when: 'Check current PI state before transition' },
+  { api: 'Transition PI', method: 'POST', endpoint: '/placements/{pi_id}/transition', when: 'Execute placement intent state change' },
+  { api: 'Create Quote', method: 'POST', endpoint: '/quotes', when: 'New quote from email extraction' },
+  { api: 'Transition Quote', method: 'POST', endpoint: '/quotes/{quote_id}/transition', when: 'Quote validation flow progression' },
+  { api: 'Link Quote', method: 'POST', endpoint: '/quotes/{quote_id}/line-items/link', when: 'Associate quote with RFQLI' },
+  { api: 'Get Intents', method: 'GET', endpoint: '/opportunities/{opp_id}/intents', when: 'Coverage Intent lookup for process manager' }
+];
+
+const MINIORQ_RELAY_TOPICS = [
+  { topic: 'relay.lifecycle', direction: 'CLS → Agora', events: 'lifecycle.entity.transitioned', consumer: 'agora-consumer' },
+  { topic: 'relay.submissions', direction: 'Agora → consumers', events: 'submissions.packet.*', consumer: 'various' },
+  { topic: 'comms.quote', direction: 'Zephyrus → consumers', events: 'INSURANCE_QUOTE, INSURANCE_DECLINE', consumer: 'TBD' },
+  { topic: 'comms.placement', direction: 'Zephyrus → consumers', events: 'SUBMISSION, SUBMISSION_TO_QUOTE', consumer: 'TBD' },
+  { topic: 'TBD (placement signals)', direction: 'Harper-claw → Agora', events: 'placement.quote_received, placement.quote_declined', consumer: 'TBD' }
+];
+
+const STEP_TYPE_STYLES = {
+  external: { color: 'var(--orange)', label: 'EXTERNAL', bg: 'rgba(251,146,60,0.08)', border: 'var(--orange)' },
+  relay:    { color: 'var(--accent)', label: 'RELAY',    bg: 'rgba(108,140,255,0.08)', border: 'var(--accent)' },
+  internal: { color: 'var(--purple)', label: 'INTERNAL', bg: 'rgba(167,139,250,0.08)', border: 'var(--purple)' },
+  cls:      { color: 'var(--green)',  label: 'CLS API',  bg: 'rgba(74,222,128,0.08)',  border: 'var(--green)' }
+};
+
+function buildMiniOrq() {
+  // Architecture diagram
+  const archEl = document.getElementById('miniorq-arch');
+  archEl.innerHTML = MINIORQ_ARCH_LAYERS.map((layer, i) => {
+    const arrow = i < MINIORQ_ARCH_LAYERS.length - 1
+      ? '<div style="display:flex; align-items:center; font-size:20px; color:var(--text-dim); padding:0 4px;">→</div>'
+      : '';
+    return `
+      <div style="flex:1; min-width:220px; padding:16px; background:var(--surface); border:1px solid var(--border); border-top:3px solid ${layer.color}; border-radius:8px;">
+        <div style="font-size:13px; font-weight:700; color:${layer.color}; margin-bottom:10px;">${layer.title}</div>
+        ${layer.items.map(item => `
+          <div style="font-size:11px; color:var(--text-dim); padding:3px 0; border-bottom:1px solid rgba(45,51,72,0.3);">${item}</div>
+        `).join('')}
+      </div>
+      ${arrow}
+    `;
+  }).join('');
+
+  // Signal source cards (clickable)
+  const sigEl = document.getElementById('miniorq-signals');
+  sigEl.innerHTML = MINIORQ_SIGNALS.map(sig => `
+    <div class="miniorq-signal-card" style="background:var(--surface); border:1px solid var(--border); border-left:4px solid ${sig.color}; border-radius:8px; overflow:hidden; cursor:pointer;"
+         onclick="this.querySelector('.miniorq-signal-details').classList.toggle('miniorq-expanded')">
+      <div style="padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span style="font-size:13px; font-weight:600; color:${sig.color};">${sig.title}</span>
+          <span style="font-size:11px; color:var(--text-dim); margin-left:8px;">${sig.subtitle}</span>
+        </div>
+        <span style="font-size:10px; color:var(--text-dim);">click to expand</span>
+      </div>
+      <div style="padding:0 16px 8px 16px; font-size:11px; color:var(--text-dim);">${sig.summary}</div>
+      <div class="miniorq-signal-details" style="max-height:0; overflow:hidden; transition:max-height 0.3s ease; padding:0 16px;">
+        <div style="padding:8px 0 12px 0; border-top:1px solid var(--border);">
+          ${sig.details.map(d => `
+            <div style="display:flex; gap:8px; padding:4px 0; font-size:11px;">
+              <span style="color:${sig.color}; font-weight:600; min-width:140px; flex-shrink:0;">${d.label}</span>
+              <span style="color:var(--text); word-break:break-word;">${d.value}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Sequence flow diagrams (clickable/expandable)
+  const flowsEl = document.getElementById('miniorq-flows');
+  flowsEl.innerHTML = MINIORQ_FLOWS.map(flow => `
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+      <div style="padding:14px 16px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;"
+           onclick="this.nextElementSibling.classList.toggle('miniorq-flow-open')">
+        <div>
+          <div style="font-size:13px; font-weight:600; color:var(--text);">${flow.title}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${flow.description}</div>
+        </div>
+        <span style="font-size:10px; color:var(--text-dim); white-space:nowrap; margin-left:12px;">click to expand</span>
+      </div>
+      <div class="miniorq-flow-body" style="max-height:0; overflow:hidden; transition:max-height 0.4s ease;">
+        <div style="padding:0 16px 16px 16px; border-top:1px solid var(--border);">
+          ${flow.steps.map(step => {
+            const st = STEP_TYPE_STYLES[step.type];
+            return `
+              <div style="display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid rgba(45,51,72,0.3);">
+                <span style="min-width:28px; text-align:right; font-size:12px; font-weight:700; color:var(--text-dim);">${step.num}.</span>
+                <span style="font-size:9px; font-weight:700; color:${st.color}; background:${st.bg}; padding:2px 6px; border-radius:3px; min-width:64px; text-align:center; flex-shrink:0; margin-top:1px;">${st.label}</span>
+                <span style="font-size:12px; color:var(--text); line-height:1.5;">${step.text}</span>
+              </div>
+            `;
+          }).join('')}
+          <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
+            ${Object.entries(STEP_TYPE_STYLES).map(([k, v]) => `
+              <span style="font-size:9px; color:${v.color}; background:${v.bg}; padding:2px 8px; border-radius:3px;">${v.label}</span>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // CLS API table
+  const apiBody = document.getElementById('miniorq-api-body');
+  apiBody.innerHTML = MINIORQ_CLS_APIS.map(a => `
+    <tr>
+      <td style="font-weight:600;">${a.api}</td>
+      <td><code style="color:${a.method === 'GET' ? 'var(--accent)' : 'var(--green)'};">${a.method}</code></td>
+      <td><code style="font-size:11px;">${a.endpoint}</code></td>
+      <td style="color:var(--text-dim); font-size:11px;">${a.when}</td>
+    </tr>
+  `).join('');
+
+  // Relay topics table
+  const topicsBody = document.getElementById('miniorq-topics-body');
+  topicsBody.innerHTML = MINIORQ_RELAY_TOPICS.map(t => `
+    <tr>
+      <td><code style="font-size:11px; color:var(--accent);">${t.topic}</code></td>
+      <td style="font-size:11px;">${t.direction}</td>
+      <td style="font-size:11px; color:var(--text-dim);">${t.events}</td>
+      <td><code style="font-size:11px;">${t.consumer}</code></td>
+    </tr>
+  `).join('');
+}
+
+buildMiniOrq();
+
+// Expand/collapse CSS for MiniOrq signal cards and flows
+(function() {
+  const style = document.createElement('style');
+  style.textContent = `
+    .miniorq-expanded { max-height: 400px !important; }
+    .miniorq-flow-open { max-height: 2000px !important; }
+  `;
+  document.head.appendChild(style);
+})();
 
 </script>
 </body>
