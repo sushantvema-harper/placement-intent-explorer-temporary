@@ -1039,8 +1039,8 @@
       <div style="font-size:10px; color:var(--text-dim);">No proposal_sent. No bound. Binding goes through Quote entity downstream.</div>
     </div>
     <div style="flex:1; min-width:200px; padding:10px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2); border-radius:6px;">
-      <div style="font-size:11px; font-weight:600; color:var(--yellow);">SLA = work items only</div>
-      <div style="font-size:10px; color:var(--text-dim);">SLA breaches create tasks, NOT state changes. PI stays in current state.</div>
+      <div style="font-size:11px; font-weight:600; color:var(--yellow);">SLA lives on PI directly (sla_deadline column)</div>
+      <div style="font-size:10px; color:var(--text-dim);">SLA lives on PI directly (sla_deadline column) for entity-level tracking. Task-level deadlines remain on individual work items. SLA breaches create adhoc tasks but do NOT change PI state.</div>
     </div>
     <div style="flex:1; min-width:200px; padding:10px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:6px;">
       <div style="font-size:11px; font-weight:600; color:var(--purple);">RFQLI states eliminated</div>
@@ -1616,11 +1616,13 @@
 
     <!-- Assignment Model Decision -->
     <div style="margin-top:20px; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:16px; max-width:960px;">
-      <h4 style="font-size:13px; margin-bottom:10px; color:var(--cyan);">Assignment Model Decision (RFQ vs PI vs work_item)</h4>
+      <h4 style="font-size:13px; margin-bottom:10px; color:var(--cyan);">Assignment Model Decision (RESOLVED per Finn)</h4>
       <ul style="font-size:11px; color:var(--text-dim); margin:0; padding-left:18px; line-height:1.8;">
-        <li><strong>PI human assignment</strong> → <code>core.work_item</code> with <code>entity_type='placement_intent'</code>, <code>kind='assignment'</code> (consistent with existing pattern)</li>
-        <li><strong>RFQ AI-agent assignment</strong> → direct columns <code>assigned_to</code>/<code>assigned_type</code>/<code>assigned_at</code> on <code>insurance.request_for_quote</code> (lightweight routing flag for Jade/MiniOrc)</li>
-        <li><strong>RFQ human assignment</strong> → rarely needed if PI assignment covers it; available via <code>work_item</code> with <code>entity_type='rfq'</code> if needed</li>
+        <li><strong>PI assignment</strong> → direct columns <code>assigned_to</code>, <code>assigned_by</code>, <code>assigned_at</code> on <code>insurance.placement_intent</code> — NOT a work_item</li>
+        <li><strong>RFQ assignment</strong> → direct columns <code>assigned_to</code>, <code>assigned_type</code>, <code>assigned_at</code> on <code>insurance.request_for_quote</code> — NOT a work_item</li>
+        <li><strong>SLA deadline</strong> → add <code>sla_deadline</code> directly to <code>insurance.placement_intent</code> (entity-level SLA)</li>
+        <li><strong>Work items (<code>core.work_item</code>)</strong> are for ADHOC operator tasks only — "follow up with carrier", "provide docs", "review decline reasons"</li>
+        <li><strong>Entity state</strong> (assignment, SLA, status) is directly editable on the entity in MegaBro UI, NOT gated by work item resolution</li>
       </ul>
     </div>
   </div>
@@ -1931,9 +1933,33 @@
     <strong>CLS</strong> (source of truth — emits lifecycle events), and <strong>Agora / MiniOrq</strong> (placement orchestrator — consumes CLS lifecycle events, transitions PI).
     CASHMONEY handles quote creation + RFQLI transitions. Agora/MiniOrq handles PI transitions. They coordinate through CLS state + Relay events, NOT direct calls.
   </p>
-  <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
     Architecture: Zephyrus → <strong>CASHMONEY / Antares</strong> → CLS → <strong>Agora / MiniOrq</strong>
   </p>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:8px; font-weight:600;">MiniOrq reducer pattern:</p>
+  <div style="background:rgba(108,140,255,0.07); border:1px solid rgba(108,140,255,0.25); border-radius:6px; padding:10px 14px; font-size:11px; color:var(--text-dim); margin-bottom:8px; line-height:1.7;">
+    <code style="color:var(--accent);">relay.comms</code> (email classifications) → MiniOrq reducer in Agora → processes →<br>
+    &nbsp;&nbsp;1. Calls CLS HTTP API (<code>POST /placements/{id}/transition</code>)<br>
+    &nbsp;&nbsp;2. Emits to <strong>NEW</strong> <code style="color:var(--green);">relay.placements</code> topic<br><br>
+    <code style="color:var(--accent);">relay.lifecycle</code> (CLS entity transitions) → MiniOrq → reacts to RFQLI/Quote transitions<br>
+    &nbsp;&nbsp;→ Calls CLS HTTP API for PI transitions
+  </div>
+  <div style="padding:12px 16px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.3); border-radius:8px; max-width:900px; margin-bottom:12px;">
+    <div style="font-size:12px; font-weight:700; color:var(--green); margin-bottom:6px;">relay.placements — New Topic</div>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:0; line-height:1.6;">
+      <code style="color:var(--green);">relay.placements</code> is a <strong>NEW topic to be registered</strong>. MiniOrq consumes
+      <code>relay.comms</code> + <code>relay.lifecycle</code>, processes signals, calls CLS transition APIs, and emits
+      placement-specific events to <code>relay.placements</code> for downstream consumers (MegaBro, Harper-Claw, analytics).
+    </p>
+  </div>
+  <div style="padding:12px 16px; background:rgba(108,140,255,0.07); border:1px solid rgba(108,140,255,0.3); border-radius:8px; max-width:900px; margin-bottom:24px;">
+    <div style="font-size:12px; font-weight:700; color:var(--accent); margin-bottom:6px;">CLS Relay Architecture Clarification</div>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:0; line-height:1.6;">
+      <strong>CLS does NOT consume any Relay topic.</strong> It is purely HTTP-driven with outbound-only Relay publishing
+      via outbox pattern. All inbound signals reach CLS through direct HTTP POST calls from Agora, MegaBro, or Atlas-Lackey.
+      Agora also separately consumes <code>artifacts.extraction.completed</code> from Aether (outside the main placement topics).
+    </p>
+  </div>
 
   <div style="padding:14px; background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.3); border-radius:8px; margin-bottom:24px;">
     <div style="font-size:13px; font-weight:600; color:var(--red); margin-bottom:6px;">⚠ Production Reality Check (verified 2026-03-25)</div>
@@ -2028,6 +2054,53 @@
       <thead><tr><th>Topic</th><th>Direction</th><th>Events</th><th>Consumer Group</th></tr></thead>
       <tbody id="miniorq-topics-body"></tbody>
     </table>
+  </div>
+
+  <!-- Section 5b: relay.submissions Signal Inventory -->
+  <h3 style="font-size:14px; margin-bottom:6px; color:var(--accent);">relay.submissions — Signal Inventory</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    4 signals currently emitted by Agora. No production consumer yet. 5th schema defined but unwired.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:16px;">
+    <table class="rules-table" style="max-width:1000px;">
+      <thead>
+        <tr>
+          <th>Signal</th>
+          <th>Fired When</th>
+          <th>Key Payload Fields</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code style="font-size:11px; color:var(--accent);">submissions.packet.generation_started</code></td>
+          <td style="font-size:11px; color:var(--text-dim);">PacketGenerationWorkflow kicks off</td>
+          <td style="font-size:11px; color:var(--text-dim);"><code>workflow_id</code>, <code>oli_id</code>, <code>opportunity_id</code>, <code>session_id</code>, <code>trigger</code> (relay_event/poller/api)</td>
+        </tr>
+        <tr>
+          <td><code style="font-size:11px; color:var(--accent);">submissions.packet.generated</code></td>
+          <td style="font-size:11px; color:var(--text-dim);">Packet fully assembled (ACORD docs + email)</td>
+          <td style="font-size:11px; color:var(--text-dim);"><code>packet_id</code>, <code>intent_id</code>, <code>coverage_type</code>, <code>acord_125_doc_id</code>, <code>acord_126_doc_id</code>, <code>has_email</code></td>
+        </tr>
+        <tr>
+          <td><code style="font-size:11px; color:var(--accent);">submissions.packet.generation_failed</code></td>
+          <td style="font-size:11px; color:var(--text-dim);">Packet generation fails after retries</td>
+          <td style="font-size:11px; color:var(--text-dim);"><code>workflow_id</code>, <code>error_message</code>, <code>failed_step</code></td>
+        </tr>
+        <tr>
+          <td><code style="font-size:11px; color:var(--accent);">submissions.packet.dispatched</code></td>
+          <td style="font-size:11px; color:var(--text-dim);">Email sent to carrier</td>
+          <td style="font-size:11px; color:var(--text-dim);"><code>packet_id</code>, <code>intent_id</code>, <code>recipient_emails</code>, <code>gmail_message_id</code></td>
+        </tr>
+        <tr style="opacity:0.65;">
+          <td><code style="font-size:11px; color:var(--yellow);">submissions.enrichment.completed</code></td>
+          <td style="font-size:11px; color:var(--text-dim);">(Schema only — not yet emitted)</td>
+          <td style="font-size:11px; color:var(--text-dim);"><code>enrichment_id</code>, <code>packet_id</code>, <code>coverage_type</code>, <code>coverage_codes</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:10px 14px; background:rgba(250,204,21,0.07); border:1px solid rgba(250,204,21,0.25); border-radius:6px; max-width:900px; margin-bottom:32px;">
+    <span style="font-size:11px; color:var(--yellow);">No production consumer for <code>relay.submissions</code> exists. These signals are emitted by Agora but not yet consumed by any downstream service.</span>
   </div>
 
   <!-- Section 6: Orchestration Actions by PI Transition -->
@@ -2462,6 +2535,18 @@
     The placement lifecycle (PI v2, RFQLI derivation, live RFQ creation) does not yet exist in production.
     All 25,440 RFQs in production were created by a one-time backfill — no runtime service is producing them.
     This roadmap brings the full placement funnel to production in seven phases, gate-by-gate.
+  </div>
+
+  <div style="margin-bottom:24px; padding:14px; background:rgba(108,140,255,0.08); border:1px solid rgba(108,140,255,0.2); border-radius:8px;">
+    <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:8px;">Parallel Swimlanes</div>
+    <div style="font-size:11px; color:var(--text-dim); line-height:1.6;">
+      Work is organized into 4 parallel lanes that can progress independently:<br>
+      <strong style="color:var(--accent);">Lane 1: Schema &amp; Data Model</strong> (Sushant + Finn) — RFQ table consolidation, missing columns, PI v2 machine<br>
+      <strong style="color:var(--green);">Lane 2: MegaBro UI</strong> (Sushant) — Sync cron fix (ENG-1787), placements page, manual PI transitions, drill-downs<br>
+      <strong style="color:var(--purple);">Lane 3: MiniOrq / Relay</strong> (Sushant + future) — relay.placements topic, signal consumer, CLS transition orchestration<br>
+      <strong style="color:var(--orange);">Lane 4: Jade Evaluation</strong> (Giridhar) — Eval framework, harness version control, deterministic CLS context<br><br>
+      <strong>Key principle:</strong> UI work (Lane 2) does NOT block on MiniOrq (Lane 3). Manual PI transitions work via direct CLS API calls. MiniOrq adds automation later.
+    </div>
   </div>
 
   <!-- Filter controls -->
@@ -5541,11 +5626,12 @@ const WI_MIGRATIONS = [
 ];
 
 const WI_PLANNED_PLACEMENT = [
-  { title: 'Placement Assignment', desc: 'kind=assignment, entity_type=placement_intent — operator or AI agent assigned to manage a specific PI. Would track who is handling UW follow-up for this coverage×carrier pair.', priority: 'High' },
-  { title: 'Placement Task (Follow-up)', desc: 'kind=task, entity_type=placement_intent — "Send follow-up to UW", "Request loss runs from customer", "Review price indication". Auto-created by cadence rules or manually by operators.', priority: 'High' },
-  { title: 'Placement Task (Quote Validation)', desc: 'kind=task, entity_type=placement_intent — "Validate extracted quote", "Compare with competing quotes", "Prepare proposal". Created when PI transitions to quoted.', priority: 'Medium' },
-  { title: 'Placement Task (Remarketing)', desc: 'kind=task, entity_type=placement_intent — "Review decline reasons", "Identify E&S carriers", "Prepare remarketing packet". Created when all PIs for OLI are declined.', priority: 'Medium' },
-  { title: 'RFQ Assignment', desc: 'kind=assignment, entity_type=rfq — operator or AI agent assigned to manage an entire RFQ (all line items for one carrier). Alternative to per-PI assignment.', priority: 'Low' },
+  // NOTE: Assignment is NOT a work_item — it lives as direct columns on insurance.placement_intent (per Finn).
+  // All items below are ADHOC operator tasks, not entity state changes.
+  { title: 'Placement Task (Follow-up)', desc: 'ADHOC operator task — kind=task, entity_type=placement_intent — "Send follow-up to UW", "Request loss runs from customer", "Review price indication". Auto-created by cadence rules or manually by operators.', priority: 'High' },
+  { title: 'Placement Task (Quote Validation)', desc: 'ADHOC operator task — kind=task, entity_type=placement_intent — "Validate extracted quote", "Compare with competing quotes", "Prepare proposal". Created when PI transitions to quoted. Informational — does NOT gate PI transition. Operator can approve/reject directly on the entity.', priority: 'Medium' },
+  { title: 'Placement Task (Remarketing)', desc: 'ADHOC operator task — kind=task, entity_type=placement_intent — "Review decline reasons", "Identify E&S carriers", "Prepare remarketing packet". Created when all PIs for OLI are declined.', priority: 'Medium' },
+  { title: 'RFQ Task (Follow-up)', desc: 'ADHOC operator task — kind=task, entity_type=rfq — "Follow up with carrier on outstanding items". RFQ assignment is NOT a work_item; it lives as direct columns on insurance.request_for_quote.', priority: 'Low' },
   { title: 'CLS Schema Migration: RFQ v2 columns', desc: 'Apply migrations adding channel, is_synthetic, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url to cpq.request_for_quote. Required before live RFQ creation.', priority: 'High' },
   { title: 'Live RFQ Creation Pipeline', desc: 'Wire Agora post-dispatch workflow to actually create RFQs in CLS production. Code exists (CreateRFQFromDispatchActivity) but is not running against production schema. Requires schema migration first.', priority: 'High' },
   { title: 'BigBrother RFQ Sync Verification', desc: 'Verify BB → Agora → CLS RFQ proxy path works end-to-end. Code exists in BB cls-sync.ts but zero BB-triggered RFQs found in production.', priority: 'Medium' },
@@ -6217,11 +6303,14 @@ const MINIORQ_CLS_APIS = [
 // relay.submissions, relay.system, relay.tasks
 // NOTE: relay.zephyrus does NOT exist in production. CASHMONEY's ZephyrusPoller is
 // misleadingly named — it actually subscribes to relay.comms and relay.lifecycle.
+// relay.placements is NEW — to be registered. Not yet in production.
+// Agora also consumes artifacts.extraction.completed from Aether (outside main placement topics).
 const MINIORQ_RELAY_TOPICS = [
-  { topic: 'relay.lifecycle', direction: 'CLS → Agora / MiniOrq', events: 'lifecycle.entity.transitioned (RFQLI, Quote, PI)', consumer: 'agora-consumer' },
-  { topic: 'relay.comms', direction: 'Zephyrus → CASHMONEY', events: 'comms.email, comms.phone_call, etc. (includes zephyrus.sales.quote_received, zephyrus.sales.decline_received). NOTE: relay.zephyrus does NOT exist — this is the real topic.', consumer: 'cashmoney-consumer (via ZephyrusPoller — name is misleading; subscribes to relay.comms + relay.lifecycle)' },
+  { topic: 'relay.lifecycle', direction: 'CLS → Agora / MiniOrq', events: 'lifecycle.entity.transitioned (RFQLI, Quote, PI). CLS publishes via outbox pattern — does NOT consume any Relay topic.', consumer: 'agora-consumer' },
+  { topic: 'relay.comms', direction: 'Zephyrus → CASHMONEY / Agora (MiniOrq)', events: 'comms.email, comms.phone_call, etc. (includes zephyrus.sales.quote_received, zephyrus.sales.decline_received). NOTE: relay.zephyrus does NOT exist — this is the real topic. MiniOrq reducer also consumes relay.comms to process email classifications.', consumer: 'cashmoney-consumer (via ZephyrusPoller — name is misleading; subscribes to relay.comms + relay.lifecycle); agora-consumer (MiniOrq reducer)' },
   { topic: 'relay.sales', direction: 'CASHMONEY → Son of Atlas / MiniOrq', events: 'antares.coverage.selected, antares.invoice.*', consumer: 'agora-consumer / sonatlas-consumer' },
-  { topic: 'relay.submissions', direction: 'Agora → consumers', events: 'submissions.packet.*', consumer: 'various' },
+  { topic: 'relay.submissions', direction: 'Agora → (no consumer yet)', events: 'submissions.packet.generation_started, submissions.packet.generated, submissions.packet.generation_failed, submissions.packet.dispatched (4 signals emitted). submissions.enrichment.completed schema defined but NOT yet emitted (5th signal). NO production consumer exists.', consumer: '(none — no downstream service consumes relay.submissions in production)' },
+  { topic: 'relay.placements', direction: 'MiniOrq/Agora → downstream (MegaBro, Harper-Claw, analytics)', events: 'Placement-specific lifecycle events emitted by MiniOrq after calling CLS HTTP transition APIs. NEW topic — to be registered. Not yet in production.', consumer: '(NEW — to be registered; downstream: MegaBro, Harper-Claw, analytics)' },
   { topic: 'relay.intake', direction: 'Intake services → consumers', events: 'intake.* events', consumer: 'various' },
   { topic: 'relay.leads', direction: 'Lead services → consumers', events: 'leads.* events', consumer: 'various' },
   { topic: 'relay.agents', direction: 'Agent services → consumers', events: 'agents.* events', consumer: 'various' },
@@ -6231,7 +6320,7 @@ const MINIORQ_RELAY_TOPICS = [
   { topic: 'relay.system', direction: 'System events', events: 'system.* events', consumer: 'various' },
   { topic: 'relay.tasks', direction: 'Task events', events: 'tasks.* events', consumer: 'various' },
   { topic: 'comms.placement', direction: 'Zephyrus → Agora (directly)', events: 'SUBMISSION_TO_QUOTE (info requests — placement-level, not sales-level)', consumer: 'agora-consumer' },
-  { topic: 'TBD (placement signals)', direction: 'Harper-claw → Agora', events: 'placement.quote_received, placement.quote_declined', consumer: 'TBD' }
+  { topic: 'artifacts.extraction.completed (Aether)', direction: 'Aether → Agora', events: 'Document extraction completed by Aether — consumed by Agora separately from main placement topics', consumer: 'agora-consumer' }
 ];
 
 const STEP_TYPE_STYLES = {
@@ -6628,7 +6717,7 @@ const WORK_ITEM_TEMPLATES = [
   { transition: '→ under_review',      title: '"Monitor UW review — SLA {days}d"',               kind: 'task', meta: '{ sla_days: 5 }' },
   { transition: '→ info_requested',    title: '"Provide {docs} to {carrier}"',                    kind: 'task', meta: '{ blocker: "customer", docs: "..." }' },
   { transition: '→ price_indication',  title: '"Review price indication — {carrier} ${premium}"', kind: 'task', meta: '{ premium, limits }' },
-  { transition: '→ quote_received',    title: '"Validate quote — {carrier} ${premium}"',          kind: 'task', meta: '{ quote_id, needs_validation: true }' },
+  { transition: '→ quote_received',    title: '"Validate quote — {carrier} ${premium}"',          kind: 'task', meta: '{ quote_id, needs_validation: true }', note: 'informational — does NOT gate PI transition. Operator can approve/reject directly on the entity.' },
   { transition: '→ approved_quote',    title: '"Present quote to customer — {carrier} ${premium}"', kind: 'task', meta: '{ quote_id, for_sales: true }' },
   { transition: '→ disqualified_quote',title: '"Review disqualified quote — loop back to carrier or remarket?"', kind: 'task', meta: '{ quote_id, validation_result }' },
   { transition: 'disqualified_quote → under_review', title: '"Re-engage {carrier} for revised quote — round {revision_count+1}"', kind: 'task', meta: '{ sla_days: 5, revision_count }' },
@@ -7750,6 +7839,17 @@ const ENG_TODOS = [
     notes: 'ensurePlacementIntent currently always starts at waiting_for_uw (IQ_MISSING_PIECES item). ensureSubmissionIntent always sets FlowTraditional — also needs FlowInstantQuote support.',
   },
 
+  {
+    phase: 1, seq: 99,
+    title: 'Add direct state columns to PlacementIntent entity',
+    desc: 'Add assigned_to, assigned_by, assigned_at, sla_deadline, sla_started_at to insurance.placement_intent. Entity state should be directly editable in MegaBro UI, not proxied through work items. Per Finn: "as much as possible should be state in the actual CLS objects."',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'RESOLVED per Finn: PI assignment and SLA are direct entity columns, not work_item records. Work items are for adhoc operator tasks only.',
+  },
+
   // ── Phase 2 ────────────────────────────────────────────────────────────────
   {
     phase: 2, seq: 11,
@@ -7826,12 +7926,12 @@ const ENG_TODOS = [
   {
     phase: 3, seq: 18,
     title: 'Placement work items in CLS',
-    desc: 'Create core.work_item entries with kind=assignment and kind=task for entity_type=placement_intent. Auto-create follow-up tasks on SLA breach. Today there are ZERO work items for the placement phase (gap callout in Work Items tab).',
+    desc: 'Adhoc placement tasks in CLS — Create core.work_item entries with kind=task for entity_type=placement_intent. Tasks are operator-created adhoc actions (follow up, review, etc.), NOT assignments or state gates. Assignment lives directly on PI entity (assigned_to column).',
     services: ['CLS'],
     ticket: null,
     priority: 'Med',
     status: 'Not Started',
-    notes: 'Work items exist for intake, submission, renewal, order — but not placement. See "Gap: No Placement Work Items Yet" section in Work Items tab.',
+    notes: 'Work items exist for intake, submission, renewal, order — but not placement. Assignment (assigned_to/assigned_by/assigned_at) lives directly on insurance.placement_intent — NOT proxied through work items. See Work Items tab.',
   },
 
   // ── Phase 4 ────────────────────────────────────────────────────────────────
@@ -7875,7 +7975,7 @@ const ENG_TODOS = [
     ticket: 'ENG-1787',
     priority: 'High',
     status: 'Not Started',
-    notes: 'HARD BLOCKER — nothing on the placements page works without live sync. Fix cron schedule + add PlacementIntent and CoverageIntent to entity list.',
+    notes: 'START IMMEDIATELY — this has ZERO dependencies and is the hard blocker for ALL MegaBro UI work. Can begin in parallel with Phase 0 schema cleanup. Fix cron schedule + add PlacementIntent and CoverageIntent to entity list.',
   },
   {
     phase: 5, seq: 23,
