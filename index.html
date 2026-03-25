@@ -1530,6 +1530,101 @@
     </div>
   </div>
 
+  <!-- RFQ Column Deep Dive -->
+  <div style="margin-bottom:32px; margin-top:32px;">
+    <h3 style="font-size:14px; margin-bottom:8px; color:var(--accent);">RFQ Column Deep Dive: What's Actually Missing</h3>
+    <div style="background:var(--bg-card); border:1px solid var(--yellow); border-radius:6px; padding:12px; margin-bottom:16px; font-size:11px; color:var(--yellow);">
+      <strong>NOTE:</strong> <code>rfq.RequestForQuote</code> in CLS (<code>internal/domain/rfq/entity.go</code>) is a <strong>DEAD STRUCT</strong> — added by Aatmodhee (2026-02-26), never instantiated. The live struct is <code>quote.RequestForQuote</code> (<code>internal/domain/quote/entity.go</code>). Only 4 truly new DB columns needed.
+    </div>
+    <table class="rules-table" style="max-width:960px;">
+      <thead><tr><th>Field</th><th>Status</th><th>Verdict</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>channel</code></td>
+          <td style="color:var(--red);">NOT IN DB</td>
+          <td><strong style="color:var(--red);">Add to DB (HIGH)</strong></td>
+          <td>Critical discriminator: brokered vs instant_quote. Required before cached_status can work.</td>
+        </tr>
+        <tr>
+          <td><code>snapshot_underwriter_name</code></td>
+          <td style="color:var(--yellow);">EXISTS as underwriter_name</td>
+          <td>Rename only</td>
+          <td>Already in insurance.request_for_quote under non-snapshot name</td>
+        </tr>
+        <tr>
+          <td><code>snapshot_underwriter_email</code></td>
+          <td style="color:var(--yellow);">EXISTS as underwriter_email</td>
+          <td>Rename only</td>
+          <td>Same</td>
+        </tr>
+        <tr>
+          <td><code>snapshot_carrier_name</code></td>
+          <td style="color:var(--yellow);">EXISTS as carrier_name</td>
+          <td>Rename only</td>
+          <td>Same</td>
+        </tr>
+        <tr>
+          <td><code>snapshot_group_name</code></td>
+          <td style="color:var(--yellow);">EXISTS as group_name</td>
+          <td>Rename only</td>
+          <td>Same</td>
+        </tr>
+        <tr>
+          <td><code>portal_name</code></td>
+          <td style="color:var(--red);">NOT IN DB (on instant_quote only)</td>
+          <td><strong>Add to DB (MED)</strong></td>
+          <td>Move from InstantQuote entity to RFQ for portal channel path</td>
+        </tr>
+        <tr>
+          <td><code>portal_url</code></td>
+          <td style="color:var(--red);">NOT IN DB (on instant_quote only)</td>
+          <td><strong>Add to DB (MED)</strong></td>
+          <td>Same as portal_name</td>
+        </tr>
+        <tr>
+          <td><code>assigned_to</code></td>
+          <td style="color:var(--red);">NOT IN DB</td>
+          <td style="color:var(--yellow);">DECISION PENDING</td>
+          <td>AI agent routing (direct column) vs human ops (work_item). Different concerns.</td>
+        </tr>
+        <tr>
+          <td><code>assigned_type</code></td>
+          <td style="color:var(--red);">NOT IN DB</td>
+          <td style="color:var(--yellow);">DECISION PENDING</td>
+          <td>"human" vs "ai_agent" — lightweight routing flag for Jade</td>
+        </tr>
+        <tr>
+          <td><code>assigned_at</code></td>
+          <td style="color:var(--red);">NOT IN DB</td>
+          <td style="color:var(--yellow);">DECISION PENDING</td>
+          <td>Follows assigned_to decision</td>
+        </tr>
+        <tr>
+          <td><code>cached_status</code></td>
+          <td style="color:var(--red);">NOT IN DB</td>
+          <td><strong>Add to DB (MED)</strong></td>
+          <td>Logic exists in ComputeRFQStatus(). Requires channel first.</td>
+        </tr>
+        <tr>
+          <td><code>product_sku_id</code></td>
+          <td style="color:var(--red);">NOT IN DB</td>
+          <td style="color:var(--text-dim);">DEFER</td>
+          <td>Entire ProductSku concept doesn't exist. Future carrier routing work.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Assignment Model Decision -->
+    <div style="margin-top:20px; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:16px; max-width:960px;">
+      <h4 style="font-size:13px; margin-bottom:10px; color:var(--cyan);">Assignment Model Decision (RFQ vs PI vs work_item)</h4>
+      <ul style="font-size:11px; color:var(--text-dim); margin:0; padding-left:18px; line-height:1.8;">
+        <li><strong>PI human assignment</strong> → <code>core.work_item</code> with <code>entity_type='placement_intent'</code>, <code>kind='assignment'</code> (consistent with existing pattern)</li>
+        <li><strong>RFQ AI-agent assignment</strong> → direct columns <code>assigned_to</code>/<code>assigned_type</code>/<code>assigned_at</code> on <code>insurance.request_for_quote</code> (lightweight routing flag for Jade/MiniOrc)</li>
+        <li><strong>RFQ human assignment</strong> → rarely needed if PI assignment covers it; available via <code>work_item</code> with <code>entity_type='rfq'</code> if needed</li>
+      </ul>
+    </div>
+  </div>
+
   <!-- Schema Audit: Migration vs Production Reality -->
   <div style="margin-bottom:32px; margin-top:40px; border-top:1px solid var(--border); padding-top:32px;">
     <h3 style="font-size:15px; margin-bottom:4px; color:var(--cyan);">Schema Audit: Migration vs Production Reality</h3>
@@ -2267,6 +2362,28 @@
     What needs to change before the two systems can be unified.
   </p>
   <div id="iq-missing-pieces" style="max-width:900px; margin-bottom:24px;"></div>
+
+  <!-- Section 7: InstantQuote Deprecation Analysis -->
+  <div style="margin-top:32px; border-top:1px solid var(--border); padding-top:28px;">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Should InstantQuote Entity Be Deprecated?</h3>
+    <ul style="font-size:11px; color:var(--text-dim); margin-bottom:16px; padding-left:18px; line-height:1.8; max-width:900px;">
+      <li><code>insurance.instant_quote</code> has <strong>0 rows in production</strong> — never used</li>
+      <li>Its state machine (ready → in_progress → quote_received → accepted → approved) <strong>overlaps with PI v2 states</strong></li>
+      <li>Its fields (carrier_name, portal_name, portal_url, premium, document_url, accepted, reason_declined) are being moved to RFQ (portal_name/url) and Quote (premium, carrier) entities</li>
+      <li>With PI v2 + RFQ <code>channel=instant_quote</code>, the InstantQuote entity becomes <strong>fully redundant</strong>:
+        <ul style="margin-top:4px; padding-left:18px;">
+          <li>RFQ with <code>channel=instant_quote</code> + <code>portal_name</code>/<code>portal_url</code> replaces the request tracking</li>
+          <li>PI v2 states (submitted → quote_received → approved_quote) replace the IQ state machine</li>
+          <li>Quote entity replaces premium/document storage</li>
+          <li><code>RFQLI.declination_category</code> replaces <code>reason_declined</code></li>
+        </ul>
+      </li>
+      <li>The legacy BigBrother IQ kanban (ready/working/declined/review/done) maps to PI v2 states</li>
+    </ul>
+    <div style="background:var(--bg-card); border:1px solid var(--green); border-radius:6px; padding:12px; max-width:900px; font-size:11px; color:var(--green);">
+      <strong>Verdict:</strong> InstantQuote entity should be deprecated once PI v2 + RFQ channel consolidation is complete. Tracked in Phase 7 Engineering TODOs ("Deprecate legacy InstantQuote entity").
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -7420,12 +7537,12 @@ const ENG_TODOS = [
   {
     phase: 0, seq: 3,
     title: 'Apply missing RFQ columns migration',
-    desc: 'Add channel, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url, assigned_to, assigned_type, assigned_at, cached_status, product_sku_id to insurance.request_for_quote. Add declination_reason, declination_category, price_indication_premium, price_indication_limits to insurance.request_for_quote_line_item. All of these exist in the Go entity struct but no applied migration covers them.',
+    desc: 'Add missing columns to insurance.request_for_quote: channel (brokered|instant_quote), portal_name, portal_url, cached_status. Snapshot fields (underwriter_name, carrier_name, etc.) already exist under non-snapshot names. AssignedTo/AssignedType/AssignedAt decision pending (AI agent routing vs work_item). ProductSkuID deferred — concept doesn\'t exist yet. Requires channel to be added before cached_status (ComputeRFQStatus depends on it).',
     services: ['CLS'],
     ticket: null,
     priority: 'High',
     status: 'Not Started',
-    notes: 'CONFIRMED 2026-03-25: 9 Go entity fields have no corresponding prod column. Missing: channel, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url, assigned_to/type/at, cached_status, product_sku_id, declination_reason/category (on RFQLI), price_indication_premium/limits (on RFQLI). Full disparity table in Schema Audit section of Work Items tab.',
+    notes: 'rfq.RequestForQuote entity in CLS is a dead struct (never instantiated). Live struct is quote.RequestForQuote. The dead struct was a design-ahead by Aatmodhee (2026-02-26). Only 4 truly new columns needed: channel, portal_name, portal_url, cached_status.',
   },
   {
     phase: 0, seq: 4,
@@ -7568,6 +7685,17 @@ const ENG_TODOS = [
     priority: 'Med',
     status: 'Not Started',
     notes: 'Unapplied migrations referencing dropped tables will fail on any clean-room or new-environment migration run. Risk: onboarding new engineers or staging environments. Migration numbers: 027, 028, 048, 079, 081.',
+  },
+
+  {
+    phase: 0, seq: 18,
+    title: 'CLS: Reconcile dead rfq.RequestForQuote struct with live quote.RequestForQuote',
+    desc: 'Two RFQ structs exist in CLS: rfq/entity.go (dead, design-ahead by Aatmodhee) and quote/entity.go (live, used by all handlers). Merge needed fields from dead struct into live struct, then remove dead struct. Dead struct\'s ComputeRFQStatus() in status.go should be wired into the live code path.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'rfq.RequestForQuote (internal/domain/rfq/entity.go) was added by Aatmodhee (2026-02-26) as a design-ahead — it is never instantiated anywhere in the codebase. The live struct is quote.RequestForQuote (internal/domain/quote/entity.go). Blocks cached_status implementation: ComputeRFQStatus() is only in the dead struct\'s package.',
   },
 
   // ── Phase 1 ────────────────────────────────────────────────────────────────
@@ -7851,7 +7979,7 @@ const ENG_TODOS = [
     ticket: null,
     priority: 'Low',
     status: 'Not Started',
-    notes: 'BigBrother is being deprecated — coordinate to sunset IQ kanban alongside legacy entity. Two parallel systems documented in Instant Quotes tab.',
+    notes: 'BigBrother is being deprecated — coordinate to sunset IQ kanban alongside legacy entity. Full deprecation analysis in Instant Quotes tab ("Should InstantQuote Entity Be Deprecated?" section). insurance.instant_quote has 0 rows in production. PI v2 + RFQ channel=instant_quote fully supersedes the IQ entity and its state machine.',
   },
   {
     phase: 7, seq: 33,
