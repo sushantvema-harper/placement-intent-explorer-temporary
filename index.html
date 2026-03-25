@@ -577,11 +577,14 @@
 <div class="tabs">
   <div class="tab active" data-panel="overview">Old → New Model</div>
   <div class="tab" data-panel="hierarchy">Entity Hierarchy</div>
-  <div class="tab" data-panel="placement">PlacementIntent Machine</div>
+  <div class="tab" data-panel="placement">PI v1 (Current)</div>
+  <div class="tab" data-panel="pi-v2">PI v2 (Proposed)</div>
+  <div class="tab" data-panel="rfqli">RFQLI Machine (v1)</div>
   <div class="tab" data-panel="scenarios">Scenario Player</div>
   <div class="tab" data-panel="materialization">Status Materialization</div>
   <div class="tab" data-panel="all-machines">All Machines</div>
   <div class="tab" data-panel="email-classifications">Email Classifications</div>
+  <div class="tab" data-panel="work-items">Work Items</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -741,6 +744,145 @@
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
+<!-- Panel 3c: PlacementIntent v2 (Proposed)    -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-pi-v2">
+  <h2 style="font-size:16px; margin-bottom:8px;">PlacementIntent v2 — Proposed State Machine</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
+    Redesigned based on Mar 25 sync with Finn and Giridhar. Key change: <strong>RFQLI states are eliminated</strong> — PI IS the source of truth and RFQLI status materializes directly from PI.
+    PI scope: from dispatch through quote validation. Binding goes downstream via Quote entity.
+  </p>
+  <p style="font-size:11px; color:var(--yellow); margin-bottom:24px; font-style:italic;">
+    ⚠ PROPOSED — not yet implemented. Design decisions documented here for alignment before implementation.
+  </p>
+
+  <!-- Design decisions summary -->
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px;">
+    <div style="flex:1; min-width:200px; padding:10px; background:rgba(108,140,255,0.08); border:1px solid rgba(108,140,255,0.2); border-radius:6px;">
+      <div style="font-size:11px; font-weight:600; color:var(--accent);">Acknowledged</div>
+      <div style="font-size:10px; color:var(--text-dim);">Optional state — can be skipped. Not all carriers acknowledge.</div>
+    </div>
+    <div style="flex:1; min-width:200px; padding:10px; background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); border-radius:6px;">
+      <div style="font-size:11px; font-weight:600; color:var(--green);">PI ends at approved_quote</div>
+      <div style="font-size:10px; color:var(--text-dim);">No proposal_sent. No bound. Binding goes through Quote entity downstream.</div>
+    </div>
+    <div style="flex:1; min-width:200px; padding:10px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2); border-radius:6px;">
+      <div style="font-size:11px; font-weight:600; color:var(--yellow);">SLA = work items only</div>
+      <div style="font-size:10px; color:var(--text-dim);">SLA breaches create tasks, NOT state changes. PI stays in current state.</div>
+    </div>
+    <div style="flex:1; min-width:200px; padding:10px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:6px;">
+      <div style="font-size:11px; font-weight:600; color:var(--purple);">RFQLI states eliminated</div>
+      <div style="font-size:10px; color:var(--text-dim);">No separate RFQLI machine. RFQLI.status materializes directly from PI.</div>
+    </div>
+  </div>
+
+  <div class="sm-container">
+    <div class="sm-graph">
+      <svg class="state-diagram" id="piv2-svg" viewBox="0 0 760 580"></svg>
+    </div>
+    <div class="sm-sidebar">
+      <div class="info-card" id="piv2-state-info">
+        <h4>Select a state</h4>
+        <p style="font-size:12px; color:var(--text-dim);">Click any state node to see details, transitions, and RFQLI materialization.</p>
+      </div>
+      <div class="info-card" style="overflow:hidden;">
+        <h4>v1 → v2 Migration</h4>
+        <div style="overflow-x:auto; max-width:100%;">
+          <table class="rules-table" style="max-width:100%; table-layout:fixed; word-wrap:break-word;">
+            <thead><tr><th style="width:35%;">v1 PI State</th><th style="width:35%;">v2 PI State</th><th style="width:30%;">Change</th></tr></thead>
+            <tbody>
+              <tr><td>waiting_for_uw</td><td>submitted / acknowledged / under_review</td><td style="color:var(--green);">Split into 3</td></tr>
+              <tr><td>quoted</td><td>quote_received → approved_quote</td><td style="color:var(--green);">Validation added</td></tr>
+              <tr><td>proposal_sent</td><td><span style="color:var(--red); text-decoration:line-through;">removed</span></td><td style="color:var(--red);">Downstream</td></tr>
+              <tr><td>on_hold</td><td>on_hold</td><td style="color:var(--text-dim);">Unchanged</td></tr>
+              <tr><td>bound</td><td><span style="color:var(--red); text-decoration:line-through;">removed</span></td><td style="color:var(--red);">Downstream</td></tr>
+              <tr><td>declined_all</td><td>declined</td><td style="color:var(--yellow);">Renamed</td></tr>
+              <tr><td>resubmission</td><td>rework</td><td style="color:var(--yellow);">Renamed</td></tr>
+              <tr><td>remarketing</td><td>remarketing</td><td style="color:var(--text-dim);">Unchanged</td></tr>
+              <tr><td>cancelled</td><td>withdrawn</td><td style="color:var(--yellow);">Renamed</td></tr>
+              <tr><td><span style="color:var(--green);">new</span></td><td>acknowledged</td><td style="color:var(--green);">Added (optional)</td></tr>
+              <tr><td><span style="color:var(--green);">new</span></td><td>info_requested</td><td style="color:var(--green);">Added</td></tr>
+              <tr><td><span style="color:var(--green);">new</span></td><td>price_indication</td><td style="color:var(--green);">Added</td></tr>
+              <tr><td><span style="color:var(--green);">new</span></td><td>disqualified_quote</td><td style="color:var(--green);">Added terminal</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RFQLI materialization -->
+  <div style="margin-top:32px;">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">RFQLI Status Materialization (PI → RFQLI)</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+      In v2, there is <strong>no separate RFQLI state machine</strong>. RFQLI.status is a pure derivation from PI.status.
+      The RFQLI table column is kept for backward compatibility and dashboard display, but is never independently transitioned.
+    </p>
+    <table class="rules-table" style="max-width:600px;">
+      <thead><tr><th>PI v2 State</th><th>→ RFQLI.status (derived)</th><th>Notes</th></tr></thead>
+      <tbody id="piv2-mat-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 3b: RFQ Line Item Machine            -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-rfqli">
+  <h2 style="font-size:16px; margin-bottom:8px;">RFQ Line Item State Machine</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Tracks per-coverage outcome within an RFQ. When a line item reaches "quoted", a Quote entity is created.
+    When ALL line items for an OLI reach "declined", remarketing becomes eligible.
+    Currently transitioned by MiniOrc (Atlas Lackey) via <code>POST /rfq-items/{id}/transition</code>.
+    Design target: derive status from PlacementIntent.
+  </p>
+
+  <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:280px; padding:12px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:8px;">
+      <div style="font-size:12px; font-weight:600; color:var(--purple); margin-bottom:6px;">PriceIndication (not a separate entity)</div>
+      <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">
+        Price indication lives as a <strong>status on RFQLineItem</strong> with two payload fields:<br>
+        <code style="font-size:10px;">PriceIndicationPremium *float64</code> — carrier's soft ballpark premium<br>
+        <code style="font-size:10px;">PriceIndicationLimits map[string]any</code> — free-form limits (JSONB)<br>
+        These fields are only populated when status = <code>price_indication</code>.
+      </div>
+    </div>
+    <div style="flex:1; min-width:280px; padding:12px; background:rgba(34,211,238,0.08); border:1px solid rgba(34,211,238,0.2); border-radius:8px;">
+      <div style="font-size:12px; font-weight:600; color:var(--cyan); margin-bottom:6px;">Quote.quote_type progression</div>
+      <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">
+        When a Quote entity is created, its <code>quote_type</code> reflects the formality level:<br>
+        <span style="color:var(--yellow);">price_indication</span> → <span style="color:var(--accent);">indication_verified</span> → <span style="color:var(--green);">full_quote</span><br>
+        A soft indication letter gets <code>price_indication</code>. A confirmed formal quote gets <code>full_quote</code>.
+        <code>indication_verified</code> is the middle ground — indication confirmed by UW but not yet a formal document.
+      </div>
+    </div>
+  </div>
+
+  <div class="sm-container">
+    <div class="sm-graph">
+      <svg class="state-diagram" id="rfqli-svg" viewBox="0 0 700 480"></svg>
+    </div>
+    <div class="sm-sidebar">
+      <div class="info-card" id="rfqli-state-info">
+        <h4>Select a state</h4>
+        <p style="font-size:12px; color:var(--text-dim);">Click any state node to see details, valid transitions, and operational definition.</p>
+      </div>
+      <div class="info-card" style="overflow:hidden;">
+        <h4>Transition Rules</h4>
+        <div style="overflow-x:auto; max-width:100%;">
+          <table class="rules-table" id="rfqli-rules-table" style="max-width:100%; table-layout:fixed; word-wrap:break-word;">
+            <thead>
+              <tr><th style="width:25%;">From</th><th style="width:25%;">To</th><th style="width:50%;">Trigger</th></tr>
+            </thead>
+            <tbody id="rfqli-rules-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
 <!-- Panel 4: Scenario Player                   -->
 <!-- ═══════════════════════════════════════════ -->
 <div class="panel" id="panel-scenarios">
@@ -885,6 +1027,67 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 8: Work Items (CLS Entity)           -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-work-items">
+  <h2 style="font-size:16px; margin-bottom:8px;">Work Items (<code>core.work_item</code>)</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
+    CLS unified work item entity — all assignments and tasks across intake, submission, renewal, and order phases
+    live in a single <code>core.work_item</code> table (since Migration 082). Legacy tables were dropped in Migration 083.
+  </p>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
+    Source: <code>internal/domain/work/item.go</code> · <code>internal/domain/task/task.go</code> · <code>migrations/082_unified_work_item.sql</code>
+  </p>
+
+  <!-- Entity definition -->
+  <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:32px;">
+    <div style="flex:1; min-width:360px;">
+      <div class="info-card">
+        <h4>WorkItem struct</h4>
+        <div id="wi-fields" style="font-size:12px;"></div>
+      </div>
+    </div>
+    <div style="flex:1; min-width:360px;">
+      <div class="info-card">
+        <h4>Kinds & Entity Scopes</h4>
+        <div id="wi-kinds"></div>
+      </div>
+      <div class="info-card" style="margin-top:12px;">
+        <h4>Statuses</h4>
+        <div id="wi-statuses"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Relationship diagram -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Work Item Relationships</h3>
+  <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:32px;" id="wi-relationships"></div>
+
+  <!-- Legacy migration story -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Legacy → Unified Migration</h3>
+  <div style="overflow-x:auto;">
+    <table class="rules-table" style="max-width:800px;" id="wi-migration-table">
+      <thead><tr><th>Legacy Table</th><th>→ Unified As</th><th>Metadata Preserved</th></tr></thead>
+      <tbody id="wi-migration-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Submissions work items: what's missing -->
+  <div style="margin-top:32px; padding:16px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px;">
+    <h3 style="font-size:14px; color:var(--yellow); margin-bottom:8px;">Gap: No Placement Work Items Yet</h3>
+    <p style="font-size:12px; color:var(--text-dim); line-height:1.6;">
+      Today, work items exist for <strong>intake</strong> (assignments + tasks on opportunity),
+      <strong>submission</strong> (assignments + tasks on submission_intent),
+      <strong>renewal</strong> (assignments + tasks on renewal_intent), and
+      <strong>order</strong> (order_tasks on order).<br><br>
+      <strong>There are no work items for the placement phase yet.</strong>
+      As PlacementIntent transitions are implemented, new work item types may be needed:
+    </p>
+    <div id="wi-planned-placement" style="margin-top:12px;"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════
 // DATA: All state machines from CLS
@@ -1016,9 +1219,10 @@ const MACHINES = {
         src: 'from code — machine comment mentions this state; can also → withdrawn if we give up'
       },
       'price_indication': {
-        def: 'The carrier has provided an informal price range or indication, but not a formal bindable quote. This is a "we\'re interested, here\'s roughly what it would cost" signal. Common with brokered submissions.',
-        note: 'Can only move forward to quoted (formal quote) or declined (carrier pulls back). Cannot return to under_review.',
-        src: 'interpreted — sits between under_review and quoted in the flow'
+        def: 'The carrier has provided an informal price range or indication, but not a formal bindable quote. This is a "we\'re interested, here\'s roughly what it would cost" signal. Common with brokered submissions. When in this state, the RFQLI carries two payload fields: PriceIndicationPremium (float64 — the carrier\'s soft ballpark premium) and PriceIndicationLimits (JSONB — free-form limits blob). A corresponding Quote entity may also be created with quote_type = "price_indication".',
+        note: 'Can only move forward to quoted (formal quote confirmed) or declined (carrier pulls back). Cannot return to under_review or be withdrawn. The Quote.quote_type field mirrors this: price_indication → indication_verified → full_quote.',
+        fields: 'PriceIndicationPremium (*float64) · PriceIndicationLimits (map[string]any JSONB)',
+        src: 'from code — rfq/entity.go lines 98-99, quote/entity.go QuoteTypePriceIndication constant'
       },
       'quoted': {
         def: 'A formal, bindable quote has been received from the carrier for this coverage line. A Quote entity has been created by Aether/extraction pipeline with premium, limits, and terms.',
@@ -2461,6 +2665,442 @@ function selectPIState(state) {
 buildPISVG();
 
 // ═══════════════════════════════════════════════
+// RFQLI STATE MACHINE SVG
+// ═══════════════════════════════════════════════
+const RFQLI = MACHINES.RFQLineItem;
+const RFQLI_POSITIONS = {
+  'pending':          { x: 120, y: 60 },
+  'submitted':        { x: 350, y: 60 },
+  'under_review':     { x: 350, y: 180 },
+  'info_requested':   { x: 120, y: 280 },
+  'price_indication': { x: 350, y: 330 },
+  'quoted':           { x: 560, y: 330 },
+  'declined':         { x: 560, y: 180 },
+  'withdrawn':        { x: 560, y: 60 },
+};
+
+const RFQLI_TRIGGERS = [
+  { from: 'pending', to: 'under_review', trigger: 'Carrier acknowledges receipt and begins review' },
+  { from: 'pending', to: 'declined', trigger: 'Carrier declines immediately (e.g., auto-decline via portal)' },
+  { from: 'pending', to: 'withdrawn', trigger: 'We withdraw the request before carrier responds' },
+  { from: 'submitted', to: 'under_review', trigger: 'Legacy path — carrier begins review (same as pending→under_review)' },
+  { from: 'submitted', to: 'declined', trigger: 'Legacy path — immediate decline' },
+  { from: 'submitted', to: 'withdrawn', trigger: 'Legacy path — we withdraw' },
+  { from: 'under_review', to: 'info_requested', trigger: 'UW requests additional docs (loss runs, MVRs, financials, etc.)' },
+  { from: 'under_review', to: 'declined', trigger: 'UW declines after review (appetite, class, loss history, state, etc.)' },
+  { from: 'under_review', to: 'price_indication', trigger: 'UW provides informal price range before formal quote' },
+  { from: 'under_review', to: 'quoted', trigger: 'UW provides formal bindable quote — Quote entity created' },
+  { from: 'info_requested', to: 'under_review', trigger: 'Requested docs provided, UW resumes review' },
+  { from: 'info_requested', to: 'declined', trigger: 'UW declines due to missing/insufficient info' },
+  { from: 'info_requested', to: 'withdrawn', trigger: 'We withdraw — gave up on providing info or remarketing elsewhere' },
+  { from: 'price_indication', to: 'quoted', trigger: 'Price indication confirmed → formal quote issued' },
+  { from: 'price_indication', to: 'declined', trigger: 'UW pulls back indication — declines to formalize' },
+];
+
+function buildRFQLISVG() {
+  const svg = document.getElementById('rfqli-svg');
+  let html = '';
+
+  // Arrowhead
+  html = `<defs>
+    <marker id="rfqli-arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#6c8cff"/>
+    </marker>
+  </defs>`;
+
+  // Draw transitions
+  const allTransitions = [];
+  for (const [from, targets] of Object.entries(RFQLI.transitions)) {
+    for (const to of targets) {
+      allTransitions.push({ from, to });
+    }
+  }
+
+  allTransitions.forEach(({ from, to }) => {
+    const fp = RFQLI_POSITIONS[from];
+    const tp = RFQLI_POSITIONS[to];
+    if (!fp || !tp) return;
+
+    const dx = tp.x - fp.x;
+    const dy = tp.y - fp.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return;
+    const nx = dx / len;
+    const ny = dy / len;
+
+    const sx = fp.x + nx * 50;
+    const sy = fp.y + ny * 20;
+    const ex = tp.x - nx * 50;
+    const ey = tp.y - ny * 20;
+
+    const mx = (sx + ex) / 2 - ny * 18;
+    const my = (sy + ey) / 2 + nx * 18;
+
+    html += `<g class="transition-arrow" data-from="${from}" data-to="${to}">
+      <path d="M${sx},${sy} Q${mx},${my} ${ex},${ey}" fill="none" stroke="#4a5068" stroke-width="1.5" marker-end="url(#rfqli-arrowhead)"/>
+    </g>`;
+  });
+
+  // Draw state nodes
+  for (const [state, pos] of Object.entries(RFQLI_POSITIONS)) {
+    const type = RFQLI.stateTypes[state];
+    const colors = STATE_COLORS[type];
+    const isTerminal = RFQLI.terminals.includes(state);
+    const w = 70;
+    const h = 18;
+
+    html += `<g class="state-node" data-state="${state}" transform="translate(${pos.x}, ${pos.y})">
+      <rect x="${-w}" y="${-h}" width="${w*2}" height="${h*2}" rx="8"
+        fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="2"
+        ${isTerminal ? 'stroke-dasharray="4,2"' : ''}/>
+      <text text-anchor="middle" dy="5" fill="${colors.text}" font-size="12" font-family="inherit" font-weight="600">${state}</text>
+    </g>`;
+  }
+
+  svg.innerHTML = html;
+
+  // Click handlers
+  svg.querySelectorAll('.state-node').forEach(node => {
+    node.addEventListener('click', () => selectRFQLIState(node.dataset.state));
+  });
+
+  // Build rules table
+  const tbody = document.getElementById('rfqli-rules-body');
+  RFQLI_TRIGGERS.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.from}</td><td>${r.to}</td><td style="color:var(--text-dim)">${r.trigger}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function selectRFQLIState(state) {
+  const svg = document.getElementById('rfqli-svg');
+  svg.querySelectorAll('.state-node').forEach(n => n.classList.remove('active'));
+  svg.querySelectorAll('.transition-arrow').forEach(a => a.classList.remove('highlighted'));
+
+  const node = svg.querySelector(`.state-node[data-state="${state}"]`);
+  if (node) node.classList.add('active');
+
+  // Highlight outgoing
+  const targets = RFQLI.transitions[state] || [];
+  targets.forEach(to => {
+    const arrow = svg.querySelector(`.transition-arrow[data-from="${state}"][data-to="${to}"]`);
+    if (arrow) arrow.classList.add('highlighted');
+  });
+
+  // Highlight incoming
+  for (const [from, tos] of Object.entries(RFQLI.transitions)) {
+    if (tos.includes(state)) {
+      const arrow = svg.querySelector(`.transition-arrow[data-from="${from}"][data-to="${state}"]`);
+      if (arrow) arrow.classList.add('highlighted');
+    }
+  }
+
+  const type = RFQLI.stateTypes[state];
+  const outgoing = RFQLI.transitions[state] || [];
+  const incoming = [];
+  for (const [from, tos] of Object.entries(RFQLI.transitions)) {
+    if (tos.includes(state)) incoming.push(from);
+  }
+
+  const rfqliDef = RFQLI.stateDefinitions ? RFQLI.stateDefinitions[state] : null;
+
+  document.getElementById('rfqli-state-info').innerHTML = `
+    <h4>${state}</h4>
+    ${rfqliDef ? `<p style="font-size:12px; color:var(--text-dim); margin:8px 0; line-height:1.5;">${rfqliDef.def}</p>` : ''}
+    ${rfqliDef && rfqliDef.src ? `<div style="font-size:10px; color:var(--text-dim); font-style:italic; margin-bottom:8px;">[${rfqliDef.src}]</div>` : ''}
+    <div class="field"><span class="key">Type</span><span class="badge ${type}">${type}</span></div>
+    <div class="field"><span class="key">Terminal?</span><span class="val">${RFQLI.terminals.includes(state) ? 'Yes' : 'No'}</span></div>
+    ${rfqliDef && rfqliDef.who ? `<div style="margin-top:8px; font-size:11px;"><span style="color:var(--cyan); font-weight:600;">Who transitions:</span> <span style="color:var(--text-dim);">${rfqliDef.who}</span></div>` : ''}
+    ${rfqliDef && rfqliDef.outcome ? `<div style="margin-top:4px; font-size:11px;"><span style="color:var(--green); font-weight:600;">Outcome:</span> <span style="color:var(--text-dim);">${rfqliDef.outcome}</span></div>` : ''}
+    ${rfqliDef && rfqliDef.note ? `<div style="margin-top:4px; font-size:11px;"><span style="color:var(--orange); font-weight:600;">Note:</span> <span style="color:var(--text-dim);">${rfqliDef.note}</span></div>` : ''}
+    ${rfqliDef && rfqliDef.fields ? `<div style="margin-top:8px; padding:8px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:6px;">
+      <div style="font-size:10px; font-weight:600; color:var(--purple); margin-bottom:4px;">Payload Fields (on RFQLI entity):</div>
+      <div style="font-size:11px; color:var(--text-dim); font-family:inherit;">${rfqliDef.fields}</div>
+    </div>` : ''}
+    <div style="margin-top:12px;">
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Can transition TO:</div>
+      ${outgoing.length ? outgoing.map(t => `<span class="badge ${RFQLI.stateTypes[t]}" style="margin:2px;">${t}</span>`).join('') : '<span style="font-size:11px; color:var(--text-dim);">None (terminal)</span>'}
+    </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Can transition FROM:</div>
+      ${incoming.length ? incoming.map(f => `<span class="badge ${RFQLI.stateTypes[f]}" style="margin:2px;">${f}</span>`).join('') : '<span style="font-size:11px; color:var(--text-dim);">None</span>'}
+    </div>
+  `;
+}
+
+buildRFQLISVG();
+
+// ═══════════════════════════════════════════════
+// PI v2 STATE MACHINE (PROPOSED)
+// ═══════════════════════════════════════════════
+const PIV2 = {
+  initial: 'submitted',
+  terminals: ['approved_quote', 'disqualified_quote', 'declined', 'withdrawn', 'remarketing', 'rework'],
+  transitions: {
+    'submitted':         ['acknowledged', 'under_review', 'info_requested', 'declined', 'withdrawn', 'on_hold'],
+    'acknowledged':      ['under_review', 'info_requested', 'declined', 'withdrawn', 'on_hold'],
+    'under_review':      ['info_requested', 'price_indication', 'quote_received', 'declined', 'withdrawn', 'on_hold'],
+    'info_requested':    ['under_review', 'declined', 'withdrawn', 'on_hold', 'rework'],
+    'price_indication':  ['quote_received', 'declined', 'on_hold'],
+    'quote_received':    ['approved_quote', 'disqualified_quote', 'on_hold'],
+    'on_hold':           ['submitted', 'acknowledged', 'under_review', 'info_requested', 'price_indication', 'quote_received', 'withdrawn'],
+    // terminals have no outgoing (except remarketing which backtracks CI)
+  },
+  stateTypes: {
+    'submitted':          'initial',
+    'acknowledged':       'active',
+    'under_review':       'active',
+    'info_requested':     'parked',
+    'price_indication':   'active',
+    'quote_received':     'active',
+    'on_hold':            'parked',
+    'approved_quote':     'terminal-win',
+    'disqualified_quote': 'terminal',
+    'declined':           'terminal',
+    'withdrawn':          'terminal',
+    'remarketing':        'terminal',
+    'rework':             'terminal',
+  },
+  stateDefinitions: {
+    'submitted': {
+      def: 'PI created when submission is dispatched to carrier. Initial state. The packet is out — waiting for any signal from the UW.',
+      rfqli: 'submitted',
+      who: 'System (auto-created when SI → submitted and RFQ/RFQLI created)',
+      src: 'new in v2 — replaces waiting_for_uw'
+    },
+    'acknowledged': {
+      def: 'Carrier confirmed receipt. Optional state — not all carriers acknowledge. Can be skipped (submitted → under_review directly). Provides visibility when tracking is available.',
+      rfqli: 'submitted',
+      who: 'Operator or future signal (email classified as SUBMISSION acknowledgment)',
+      note: 'Skip-able: submitted can go directly to under_review if no ack.',
+      src: 'new in v2 — from transcript: "not everyone provides acknowledgments"'
+    },
+    'under_review': {
+      def: 'Carrier is actively reviewing the submission. UW has the packet and is evaluating the risk. Ball is in the carrier\'s court.',
+      rfqli: 'under_review',
+      who: 'Operator or signal (carrier response indicating active review)',
+      src: 'new in v2 — granular state within old waiting_for_uw'
+    },
+    'info_requested': {
+      def: 'UW needs additional information — loss runs, MVRs, financials, supplemental apps, etc. Creates a work item (task) for the operator to gather docs. Blocker type: customer (we need docs) or internal (we need to prepare something).',
+      rfqli: 'info_requested',
+      who: 'Operator or signal (email classified as SUBMISSION_TO_QUOTE / info request)',
+      note: 'SLA tracked at work item level, not on PI state. Can lead to rework if info cannot be provided.',
+      src: 'new in v2 — from transcript: "additional information capture"'
+    },
+    'price_indication': {
+      def: 'Carrier provided informal price range — not a formal bindable quote. Payload: PriceIndicationPremium (float64) and PriceIndicationLimits (JSONB) on the RFQLI entity. May or may not lead to a formal quote.',
+      rfqli: 'price_indication',
+      who: 'Operator or signal (email classified as INSURANCE_QUOTE with quote_type=price_indication)',
+      note: 'From transcript: "exclusive price indications, price indication + non-bindable quote combos, and bindable quotes"',
+      fields: 'RFQLI.PriceIndicationPremium (*float64) · RFQLI.PriceIndicationLimits (map[string]any)',
+      src: 'carried from v1 RFQLI — now a PI state'
+    },
+    'quote_received': {
+      def: 'Formal quote received from carrier. A Quote entity has been created (status: pending_validation). Premium, limits, and terms are known but not yet validated. Needs system + human validation before it can be approved.',
+      rfqli: 'quoted',
+      who: 'Operator or signal (email classified as INSURANCE_QUOTE, Quote entity created)',
+      note: 'This is NOT the terminal — validation must happen. Two outcomes: approved_quote or disqualified_quote.',
+      src: 'v2 split — old v1 "quoted" is now quote_received → validation → approved/disqualified'
+    },
+    'on_hold': {
+      def: 'Placement paused. Customer restructuring, internal decision pending, or operator needs time. Communications suppressed. Can resume to any prior active state.',
+      rfqli: '(preserves prior RFQLI status)',
+      who: 'Operator via MegaBro',
+      src: 'carried from v1'
+    },
+    'approved_quote': {
+      def: 'Quote has been validated (system + human) and approved. This is the positive terminal — the PI successfully obtained a usable quote. Downstream: Quote entity → selected, then sales/binding phase via CoverageIntent advancement.',
+      rfqli: 'quoted',
+      who: 'Operator after validation review, or system after automated validation passes',
+      outcome: 'Process Manager advances CI from placement → sales phase',
+      src: 'new in v2 — from transcript: "approved quote is what tells you let\'s go to the next stage"'
+    },
+    'disqualified_quote': {
+      def: 'Quote received but failed validation — extraction errors, mismatched data, terms don\'t match what was requested, or carrier sent wrong coverage. May trigger rework (go back to carrier) or remarketing.',
+      rfqli: 'quoted (but Quote.status = invalid)',
+      who: 'Operator or system after validation fails',
+      note: 'Different from declined (carrier said no) — here the carrier said yes but the quote is unusable.',
+      src: 'new in v2 — from transcript: "if it\'s invalid... it could mean we can figure out what\'s going on"'
+    },
+    'declined': {
+      def: 'Carrier declined to quote this coverage. Declination category tracked on RFQLI (appetite, class_of_business, loss_history, premium_size, state_restriction, information_missing, other). If ALL PIs for an OLI are declined → remarketing eligible.',
+      rfqli: 'declined',
+      who: 'Operator or signal (email classified as INSURANCE_DECLINE)',
+      outcome: 'If all PIs for OLI declined → operator can trigger remarketing',
+      src: 'renamed from v1 declined_all'
+    },
+    'withdrawn': {
+      def: 'We pulled the request — carrier didn\'t decline, we chose to stop pursuing. Could be: remarketing elsewhere, customer cancelled, wrong carrier, or operator killed it.',
+      rfqli: 'withdrawn',
+      who: 'Operator',
+      src: 'renamed from v1 cancelled — "withdrawn" is more precise for the carrier relationship'
+    },
+    'remarketing': {
+      def: 'Current market didn\'t work — try different carriers or E&S markets. Process Manager backtracks CI: placement → submission. New SI created with type=remarketing.',
+      rfqli: 'withdrawn',
+      who: 'Operator after reviewing decline reasons or unacceptable quotes',
+      outcome: 'CI backtracks to submission phase. New RFQs + PIs created for different carriers.',
+      note: 'From transcript: "remarketing only happens after decline"',
+      src: 'carried from v1'
+    },
+    'rework': {
+      def: 'Submission needs correction — wrong docs, missing info that can\'t be obtained, or packet defect. Different from remarketing (same carrier, fix the packet). Process Manager backtracks CI: placement → submission.',
+      rfqli: 'withdrawn',
+      who: 'Operator determines packet was defective',
+      outcome: 'CI backtracks to submission phase. New SI created with prior_si reference.',
+      note: 'From transcript: "resubmission is rework"',
+      src: 'renamed from v1 resubmission'
+    },
+  },
+};
+
+const PIV2_POSITIONS = {
+  'submitted':          { x: 100, y: 50 },
+  'acknowledged':       { x: 300, y: 50 },
+  'under_review':       { x: 500, y: 50 },
+  'info_requested':     { x: 100, y: 190 },
+  'price_indication':   { x: 380, y: 190 },
+  'quote_received':     { x: 620, y: 190 },
+  'on_hold':            { x: 100, y: 370 },
+  'approved_quote':     { x: 620, y: 340 },
+  'disqualified_quote': { x: 620, y: 460 },
+  'declined':           { x: 380, y: 340 },
+  'withdrawn':          { x: 380, y: 460 },
+  'remarketing':        { x: 200, y: 520 },
+  'rework':             { x: 100, y: 460 },
+};
+
+// RFQLI materialization mapping
+const PIV2_RFQLI_MAP = [
+  { pi: 'submitted', rfqli: 'submitted', note: 'Initial — dispatched to carrier' },
+  { pi: 'acknowledged', rfqli: 'submitted', note: 'Ack is PI-only visibility, RFQLI stays submitted' },
+  { pi: 'under_review', rfqli: 'under_review', note: 'Direct 1:1 mapping' },
+  { pi: 'info_requested', rfqli: 'info_requested', note: 'Direct 1:1 mapping' },
+  { pi: 'price_indication', rfqli: 'price_indication', note: 'RFQLI carries PriceIndicationPremium + PriceIndicationLimits payload' },
+  { pi: 'quote_received', rfqli: 'quoted', note: 'Quote entity exists but may not be validated yet' },
+  { pi: 'approved_quote', rfqli: 'quoted', note: 'Quote validated + approved. Quote.status = selected' },
+  { pi: 'disqualified_quote', rfqli: 'quoted', note: 'Quote exists but invalid. Quote.status = invalid' },
+  { pi: 'on_hold', rfqli: '(prior status preserved)', note: 'RFQLI does not change when PI is paused' },
+  { pi: 'declined', rfqli: 'declined', note: 'Direct 1:1. RFQLI.declination_category populated' },
+  { pi: 'withdrawn', rfqli: 'withdrawn', note: 'Direct 1:1' },
+  { pi: 'remarketing', rfqli: 'withdrawn', note: 'From RFQLI perspective, we withdrew this request' },
+  { pi: 'rework', rfqli: 'withdrawn', note: 'From RFQLI perspective, we withdrew for rework' },
+];
+
+function buildPIV2SVG() {
+  const svg = document.getElementById('piv2-svg');
+  let html = `<defs>
+    <marker id="piv2-arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#6c8cff"/>
+    </marker>
+  </defs>`;
+
+  // Draw transitions
+  for (const [from, targets] of Object.entries(PIV2.transitions)) {
+    for (const to of targets) {
+      const fp = PIV2_POSITIONS[from];
+      const tp = PIV2_POSITIONS[to];
+      if (!fp || !tp) continue;
+      const dx = tp.x - fp.x; const dy = tp.y - fp.y;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      if (len === 0) continue;
+      const nx = dx/len; const ny = dy/len;
+      const sx = fp.x + nx*55; const sy = fp.y + ny*18;
+      const ex = tp.x - nx*55; const ey = tp.y - ny*18;
+      const mx = (sx+ex)/2 - ny*15; const my = (sy+ey)/2 + nx*15;
+      html += `<g class="transition-arrow" data-from="${from}" data-to="${to}">
+        <path d="M${sx},${sy} Q${mx},${my} ${ex},${ey}" fill="none" stroke="#4a5068" stroke-width="1.5" marker-end="url(#piv2-arrow)"/>
+      </g>`;
+    }
+  }
+
+  // Draw nodes
+  for (const [state, pos] of Object.entries(PIV2_POSITIONS)) {
+    const type = PIV2.stateTypes[state];
+    const colors = STATE_COLORS[type];
+    const isTerminal = PIV2.terminals.includes(state);
+    const w = state.length > 14 ? 85 : 70;
+    const h = 18;
+    html += `<g class="state-node" data-state="${state}" transform="translate(${pos.x}, ${pos.y})">
+      <rect x="${-w}" y="${-h}" width="${w*2}" height="${h*2}" rx="8"
+        fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="2"
+        ${isTerminal ? 'stroke-dasharray="4,2"' : ''}/>
+      <text text-anchor="middle" dy="5" fill="${colors.text}" font-size="${state.length > 16 ? 10 : 12}" font-family="inherit" font-weight="600">${state}</text>
+    </g>`;
+  }
+
+  svg.innerHTML = html;
+
+  svg.querySelectorAll('.state-node').forEach(node => {
+    node.addEventListener('click', () => selectPIV2State(node.dataset.state));
+  });
+
+  // Build materialization table
+  const matBody = document.getElementById('piv2-mat-body');
+  matBody.innerHTML = PIV2_RFQLI_MAP.map(m => `
+    <tr>
+      <td style="font-weight:600; color:${(STATE_COLORS[PIV2.stateTypes[m.pi]] || {}).text || 'var(--text)'};">${m.pi}</td>
+      <td>${m.rfqli}</td>
+      <td style="font-size:10px; color:var(--text-dim);">${m.note}</td>
+    </tr>
+  `).join('');
+}
+
+function selectPIV2State(state) {
+  const svg = document.getElementById('piv2-svg');
+  svg.querySelectorAll('.state-node').forEach(n => n.classList.remove('active'));
+  svg.querySelectorAll('.transition-arrow').forEach(a => a.classList.remove('highlighted'));
+
+  const node = svg.querySelector(`.state-node[data-state="${state}"]`);
+  if (node) node.classList.add('active');
+
+  const targets = PIV2.transitions[state] || [];
+  targets.forEach(to => {
+    const a = svg.querySelector(`.transition-arrow[data-from="${state}"][data-to="${to}"]`);
+    if (a) a.classList.add('highlighted');
+  });
+  for (const [from, tos] of Object.entries(PIV2.transitions)) {
+    if (tos.includes(state)) {
+      const a = svg.querySelector(`.transition-arrow[data-from="${from}"][data-to="${state}"]`);
+      if (a) a.classList.add('highlighted');
+    }
+  }
+
+  const type = PIV2.stateTypes[state];
+  const d = PIV2.stateDefinitions[state] || {};
+  const outgoing = PIV2.transitions[state] || [];
+  const incoming = [];
+  for (const [from, tos] of Object.entries(PIV2.transitions)) {
+    if (tos.includes(state)) incoming.push(from);
+  }
+
+  document.getElementById('piv2-state-info').innerHTML = `
+    <h4>${state}</h4>
+    ${d.def ? `<p style="font-size:12px; color:var(--text-dim); margin:8px 0; line-height:1.5;">${d.def}</p>` : ''}
+    ${d.src ? `<div style="font-size:10px; color:var(--text-dim); font-style:italic; margin-bottom:8px;">[${d.src}]</div>` : ''}
+    <div class="field"><span class="key">Type</span><span class="badge ${type}">${type}</span></div>
+    <div class="field"><span class="key">Terminal?</span><span class="val">${PIV2.terminals.includes(state) ? 'Yes' : 'No'}</span></div>
+    ${d.rfqli ? `<div class="field"><span class="key">RFQLI derives</span><span class="val" style="color:var(--purple);">${d.rfqli}</span></div>` : ''}
+    ${d.who ? `<div style="margin-top:8px; font-size:11px;"><span style="color:var(--cyan); font-weight:600;">Who:</span> <span style="color:var(--text-dim);">${d.who}</span></div>` : ''}
+    ${d.outcome ? `<div style="margin-top:4px; font-size:11px;"><span style="color:var(--green); font-weight:600;">Outcome:</span> <span style="color:var(--text-dim);">${d.outcome}</span></div>` : ''}
+    ${d.note ? `<div style="margin-top:4px; font-size:11px;"><span style="color:var(--orange); font-weight:600;">Note:</span> <span style="color:var(--text-dim);">${d.note}</span></div>` : ''}
+    ${d.fields ? `<div style="margin-top:8px; padding:8px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:6px;"><div style="font-size:10px; font-weight:600; color:var(--purple);">Payload Fields:</div><div style="font-size:11px; color:var(--text-dim);">${d.fields}</div></div>` : ''}
+    <div style="margin-top:12px;">
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Can transition TO:</div>
+      ${outgoing.length ? outgoing.map(t => `<span class="badge ${PIV2.stateTypes[t]}" style="margin:2px;">${t}</span>`).join('') : '<span style="font-size:11px; color:var(--text-dim);">None (terminal)</span>'}
+    </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Can transition FROM:</div>
+      ${incoming.length ? incoming.map(f => `<span class="badge ${PIV2.stateTypes[f]}" style="margin:2px;">${f}</span>`).join('') : '<span style="font-size:11px; color:var(--text-dim);">None (initial)</span>'}
+    </div>
+  `;
+}
+
+buildPIV2SVG();
+
+// ═══════════════════════════════════════════════
 // SCENARIO PLAYER
 // ═══════════════════════════════════════════════
 let currentScenario = null;
@@ -2700,6 +3340,7 @@ function buildAllMachines() {
             ${d.who ? `<div style="font-size:10px; color:var(--cyan); margin-top:2px;">Who: ${d.who}</div>` : ''}
             ${d.note ? `<div style="font-size:10px; color:var(--orange); margin-top:2px;">Note: ${d.note}</div>` : ''}
             ${d.sla ? `<div style="font-size:10px; color:var(--purple); margin-top:2px;">SLA: ${d.sla}</div>` : ''}
+            ${d.fields ? `<div style="font-size:10px; color:var(--purple); margin-top:2px;">Fields: <code>${d.fields}</code></div>` : ''}
             ${d.outcome ? `<div style="font-size:10px; color:var(--green); margin-top:2px;">Outcome: ${d.outcome}</div>` : ''}
           </div>`;
         }).join('')}
@@ -3241,6 +3882,350 @@ function selectEmailClass(idx) {
 }
 
 buildEmailClassifications();
+
+// ═══════════════════════════════════════════════
+// WORK ITEMS (CLS core.work_item entity)
+// ═══════════════════════════════════════════════
+const WI_FIELDS = [
+  { name: 'id', type: 'BIGSERIAL PK', note: null },
+  { name: 'kind', type: 'TEXT NOT NULL', note: 'assignment | task | order_task' },
+  { name: 'entity_type', type: 'TEXT NOT NULL', note: 'opportunity | submission_intent | renewal_intent | order' },
+  { name: 'entity_id', type: 'BIGINT NOT NULL', note: 'FK to the parent entity' },
+  { name: 'parent_id', type: 'BIGINT FK', note: 'Points to assignment work_item (tasks are children of assignments)' },
+  { name: 'title', type: 'TEXT', note: null },
+  { name: 'body', type: 'TEXT', note: null },
+  { name: 'status', type: 'TEXT NOT NULL', note: 'open | in_progress | completed | cancelled' },
+  { name: 'assigned_to', type: 'TEXT', note: 'Operator email or agent name' },
+  { name: 'assigned_by', type: 'TEXT', note: null },
+  { name: 'assigned_at', type: 'TIMESTAMPTZ', note: null },
+  { name: 'sla_deadline', type: 'TIMESTAMPTZ', note: 'SLA target for this work item' },
+  { name: 'sla_started_at', type: 'TIMESTAMPTZ', note: 'When SLA clock started' },
+  { name: 'scheduled_at', type: 'TIMESTAMPTZ', note: 'Future scheduling' },
+  { name: 'completed_at', type: 'TIMESTAMPTZ', note: 'When marked completed' },
+  { name: 'metadata', type: 'JSONB DEFAULT {}', note: 'Extensible: contact info, task_number, step_details, legacy_id, etc.' },
+  { name: 'created_at', type: 'TIMESTAMPTZ', note: null },
+  { name: 'updated_at', type: 'TIMESTAMPTZ', note: null },
+];
+
+const WI_KINDS = [
+  {
+    kind: 'assignment', color: 'var(--accent)',
+    desc: '1:1 per entity — the operator who owns this entity\'s lifecycle. UNIQUE constraint: one assignment per (entity_type, entity_id).',
+    scopes: [
+      { entity: 'opportunity', phase: 'Intake', legacy: 'insurance.intake_assignment', note: 'Intake specialist assigned to collect application data' },
+      { entity: 'submission_intent', phase: 'Submission', legacy: 'insurance.submission_assignment', note: 'Operator building and dispatching the packet' },
+      { entity: 'renewal_intent', phase: 'Renewal', legacy: 'insurance.renewal_assignment', note: 'Retention specialist managing the renewal' },
+    ]
+  },
+  {
+    kind: 'task', color: 'var(--green)',
+    desc: 'N per entity — discrete work items within a phase. Children of assignments (parent_id FK). Created by operators or auto-generated.',
+    scopes: [
+      { entity: 'opportunity', phase: 'Intake', legacy: 'insurance.intake_task', note: 'e.g., "Request loss runs from insured", "Verify FEIN"' },
+      { entity: 'submission_intent', phase: 'Submission', legacy: 'insurance.submission_task', note: 'e.g., "Generate ACORD 125", "Review carrier recommendations"' },
+      { entity: 'renewal_intent', phase: 'Renewal', legacy: 'insurance.renewal_task', note: 'e.g., "Contact insured re: renewal", "Compare renewal quotes"' },
+    ]
+  },
+  {
+    kind: 'order_task', color: 'var(--orange)',
+    desc: 'N per order — structured steps for order fulfillment. Has task_number (unique per order), can be assigned to human or viper (AI agent). No assignment parent.',
+    scopes: [
+      { entity: 'order', phase: 'Sales/Binding', legacy: 'insurance.order_tasks', note: 'Decomposed order steps: send proposal, collect payment, request bind, etc.' },
+    ],
+    extraStatuses: ['pending', 'blocked', 'skipped'],
+    extraFields: ['task_number', 'task_type', 'lifecycle_status', 'assigned_agent', 'step_details (JSONB)', 'result (JSONB)', 'priority', 'blocked_reason', 'viper_reason'],
+  },
+];
+
+const WI_STATUSES = [
+  { val: 'open', type: 'initial', def: 'Work item created but not yet started.' },
+  { val: 'in_progress', type: 'active', def: 'Someone is actively working on this.' },
+  { val: 'completed', type: 'terminal-win', def: 'Work item is done. completed_at is set.' },
+  { val: 'cancelled', type: 'terminal', def: 'Work item was cancelled. Only on unified model (legacy had no cancelled status).' },
+];
+
+const WI_ORDER_STATUSES = [
+  { val: 'pending', type: 'initial', def: 'Order task not yet started (legacy default).' },
+  { val: 'in_progress', type: 'active', def: 'Task is being worked.' },
+  { val: 'completed', type: 'terminal-win', def: 'Task done.' },
+  { val: 'blocked', type: 'parked', def: 'Task is blocked by a dependency. blocked_reason and blocked_at tracked.' },
+  { val: 'skipped', type: 'terminal', def: 'Task was skipped (not applicable for this order).' },
+];
+
+const WI_MIGRATIONS = [
+  { legacy: 'insurance.intake_assignment', unified: 'kind=assignment, entity_type=opportunity', metadata: 'contact_name, contact_email, contact_phone, acquisition_channel, legacy_id' },
+  { legacy: 'insurance.intake_task', unified: 'kind=task, entity_type=opportunity', metadata: 'legacy_id' },
+  { legacy: 'insurance.submission_assignment', unified: 'kind=assignment, entity_type=submission_intent', metadata: 'legacy_id' },
+  { legacy: 'insurance.submission_task', unified: 'kind=task, entity_type=submission_intent', metadata: 'legacy_id' },
+  { legacy: 'insurance.renewal_assignment', unified: 'kind=assignment, entity_type=renewal_intent', metadata: 'legacy_id' },
+  { legacy: 'insurance.renewal_task', unified: 'kind=task, entity_type=renewal_intent', metadata: 'legacy_id' },
+  { legacy: 'insurance.order_tasks', unified: 'kind=order_task, entity_type=order', metadata: 'task_number, assigned_agent, step_details, result, started_at, legacy_id' },
+];
+
+const WI_PLANNED_PLACEMENT = [
+  { title: 'Placement Assignment', desc: 'kind=assignment, entity_type=placement_intent — operator or AI agent assigned to manage a specific PI. Would track who is handling UW follow-up for this coverage×carrier pair.', priority: 'High' },
+  { title: 'Placement Task (Follow-up)', desc: 'kind=task, entity_type=placement_intent — "Send follow-up to UW", "Request loss runs from customer", "Review price indication". Auto-created by cadence rules or manually by operators.', priority: 'High' },
+  { title: 'Placement Task (Quote Validation)', desc: 'kind=task, entity_type=placement_intent — "Validate extracted quote", "Compare with competing quotes", "Prepare proposal". Created when PI transitions to quoted.', priority: 'Medium' },
+  { title: 'Placement Task (Remarketing)', desc: 'kind=task, entity_type=placement_intent — "Review decline reasons", "Identify E&S carriers", "Prepare remarketing packet". Created when all PIs for OLI are declined.', priority: 'Medium' },
+  { title: 'RFQ Assignment', desc: 'kind=assignment, entity_type=rfq — operator or AI agent assigned to manage an entire RFQ (all line items for one carrier). Alternative to per-PI assignment.', priority: 'Low' },
+];
+
+// (Legacy constants removed)
+const _UNUSED = [
+  // Existing Linear tickets
+  {
+    ticket: 'ENG-1787', priority: 'Urgent', category: 'infra',
+    desc: 'Fix lifecycle sync cron + add placement-intent to sync entity list. Sync only runs at startup, not on a cron. placement-intent is not in the 16 synced entities.',
+    owner: 'Sushant', blockedBy: null, status: 'todo',
+    entities: ['PlacementIntent', 'CoverageIntent'],
+    note: 'HARD BLOCKER for all placements work. Verified empirically via CloudWatch.'
+  },
+  {
+    ticket: 'ENG-1788', priority: 'High', category: 'ui',
+    desc: 'Enrich placements page — SLA indicators, carrier detail, missing views. The /placements skeleton exists but is not operationally useful.',
+    owner: 'Sushant', blockedBy: 'ENG-1787', status: 'blocked',
+    entities: ['PlacementIntent', 'RFQLineItem'],
+    note: 'SheetPage system auto-renders from seed definitions. Need to add placement-specific views.'
+  },
+  {
+    ticket: 'ENG-1789', priority: 'Medium', category: 'ui',
+    desc: 'Bulk actions for placements page — bulk pause, bulk remarket, bulk reassign.',
+    owner: 'Sushant', blockedBy: 'ENG-1788', status: 'blocked',
+    entities: ['PlacementIntent'],
+    note: null
+  },
+  {
+    ticket: 'ENG-1790', priority: 'High', category: 'ui',
+    desc: 'RFQ drill-down in placements side panel — show RFQLI statuses, carrier details, quote info per coverage.',
+    owner: 'Sushant', blockedBy: 'ENG-1787', status: 'blocked',
+    entities: ['RFQ', 'RFQLineItem', 'Quote'],
+    note: null
+  },
+  {
+    ticket: 'ENG-1791', priority: 'High', category: 'data-model',
+    desc: 'Design PI aggregation rules from RFQLI statuses + harper-claw transition integration. Align on PI→RFQLI schema evolution.',
+    owner: 'Sushant', blockedBy: null, status: 'in-progress',
+    entities: ['PlacementIntent', 'RFQLineItem'],
+    note: 'Needs Finn + Giridhar alignment. Design doc v4 created. This explorer tool supports this work.'
+  },
+  {
+    ticket: 'ENG-1792', priority: 'Medium', category: 'ui',
+    desc: 'Remarketing surface on placements page — show "All Declined" indicator, decline reasons, remarket button.',
+    owner: 'Sushant', blockedBy: 'ENG-1788', status: 'blocked',
+    entities: ['PlacementIntent', 'RFQLineItem'],
+    note: 'Blocked by placements page enrichment + CLS remarketing endpoints.'
+  },
+  {
+    ticket: 'ENG-1785', priority: 'High', category: 'bug',
+    desc: 'Fix NULL core.opportunity.name pgx scan error in Agora/migi. AssembleContext fails for opportunities with NULL name.',
+    owner: 'Sushant', blockedBy: null, status: 'todo',
+    entities: ['Opportunity'],
+    note: 'Affects urgency-v2-recompute workflows. Seen on opp 489296.'
+  },
+  {
+    ticket: 'ENG-1786', priority: 'Medium', category: 'bug',
+    desc: 'MegaBro sync-pipeline references non-existent CLS tables: insurance.order_ext, insurance.v_policy_line_item_full.',
+    owner: 'Sushant', blockedBy: null, status: 'todo',
+    entities: ['Order'],
+    note: 'Fires every sync cycle (~every 2 min). Noisy but not blocking.'
+  },
+
+  // New planned items from placement transition analysis
+  {
+    ticket: 'TBD', priority: 'High', category: 'placement-transition',
+    desc: 'Manual PI transition API — operators need to manually advance/revert PlacementIntent status via MegaBro UI.',
+    owner: 'Sushant', blockedBy: 'ENG-1787', status: 'planned',
+    entities: ['PlacementIntent'],
+    note: 'v0.0: manual-only transitions. No automated signals yet. Needs CLS transition endpoint for PI.'
+  },
+  {
+    ticket: 'TBD', priority: 'High', category: 'placement-transition',
+    desc: 'PI → RFQLI status derivation in CLS — when PI transitions, RFQLI status should be automatically derived/materialized.',
+    owner: 'Finn / Sushant', blockedBy: 'ENG-1791', status: 'planned',
+    entities: ['PlacementIntent', 'RFQLineItem'],
+    note: 'Design decision: PI is source of truth, RFQLI derives from PI. CLS schema may need rfqli_id on PI.'
+  },
+  {
+    ticket: 'TBD', priority: 'Medium', category: 'placement-transition',
+    desc: 'RFQ status materialization from RFQLI statuses — aggregation rules (all pending → submitted, any info_requested → triaging, all terminal → completed).',
+    owner: 'Finn / Sushant', blockedBy: null, status: 'planned',
+    entities: ['RFQ', 'RFQLineItem'],
+    note: 'ComputeRFQStatus exists in CLS but needs validation against operator expectations.'
+  },
+  {
+    ticket: 'TBD', priority: 'Medium', category: 'placement-transition',
+    desc: 'Operator pause/resume for PlacementIntent — on_hold state with communication suppression. MegaBro button → CLS transition.',
+    owner: 'Sushant', blockedBy: 'ENG-1788', status: 'planned',
+    entities: ['PlacementIntent'],
+    note: 'on_hold → any active state. Future: communication systems check on_hold before sending.'
+  },
+  {
+    ticket: 'TBD', priority: 'Medium', category: 'placement-transition',
+    desc: 'Remarketing flow — when all PIs for an OLI are declined_all, enable operator to trigger remarketing. CLS backtracks CI to submission, creates new SI.',
+    owner: 'Sushant', blockedBy: 'ENG-1792', status: 'planned',
+    entities: ['PlacementIntent', 'CoverageIntent', 'SubmissionIntent'],
+    note: 'Process Manager handles CI backtrack. New SI gets submission_type=remarketing with prior_si reference.'
+  },
+  {
+    ticket: 'TBD', priority: 'Medium', category: 'placement-transition',
+    desc: 'Resubmission flow — PI → resubmission when packet was defective (wrong docs, wrong entity). Similar to remarketing but same carrier.',
+    owner: 'Sushant', blockedBy: 'ENG-1792', status: 'planned',
+    entities: ['PlacementIntent', 'CoverageIntent', 'SubmissionIntent'],
+    note: 'Different from remarketing: resubmission = fix the packet, remarketing = try different carriers.'
+  },
+  {
+    ticket: 'TBD', priority: 'High', category: 'placement-transition',
+    desc: 'Quote validation gate — before PI can transition quoted → proposal_sent, the Quote entity must be validated (pending_validation → pending_decision).',
+    owner: 'Aryan / Sushant', blockedBy: null, status: 'planned',
+    entities: ['PlacementIntent', 'Quote'],
+    note: 'Aryan + Atmody have existing validation infra. Need to wire it into PI transition rules.'
+  },
+  {
+    ticket: 'TBD', priority: 'Low', category: 'placement-transition',
+    desc: 'Price indication tracking — when RFQLI enters price_indication, surface the PriceIndicationPremium and PriceIndicationLimits on MegaBro placements page.',
+    owner: 'Sushant', blockedBy: 'ENG-1788', status: 'planned',
+    entities: ['RFQLineItem'],
+    note: 'Informational — helps operators see carrier interest before formal quotes.'
+  },
+  {
+    ticket: 'TBD', priority: 'Medium', category: 'integration',
+    desc: 'Relay signal consumer (MiniOrc) — Agora service that consumes placement signals from Relay and transitions PI via CLS. Future automated layer.',
+    owner: 'Sushant', blockedBy: 'ENG-1791', status: 'planned',
+    entities: ['PlacementIntent', 'RFQLineItem'],
+    note: 'Not in v0.0 scope. Depends on harper-claw signal taxonomy + Relay topic definition. Loosely coupled.'
+  },
+  {
+    ticket: 'TBD', priority: 'Medium', category: 'integration',
+    desc: 'Relay topic for placement signals — define schema for placement.quote_received, placement.quote_declined, etc. in Relay schema registry.',
+    owner: 'Sushant + Giridhar', blockedBy: null, status: 'planned',
+    entities: ['PlacementIntent'],
+    note: 'Signal taxonomy: ~2 core signals (quote_received, quote_declined) + TBD (info_requested, docs_submitted, escalation_needed).'
+  },
+  {
+    ticket: 'TBD', priority: 'High', category: 'data-model',
+    desc: 'CLS schema evolution: PI at RFQLI level — PI currently has oli_id, needs rfqli_id (or managed relationship). 1:1 PI↔RFQLI.',
+    owner: 'Finn', blockedBy: null, status: 'planned',
+    entities: ['PlacementIntent', 'RFQLineItem'],
+    note: 'Critical design decision. PI.oli_id may remain for backward compat while adding rfqli_id.'
+  },
+  {
+    ticket: 'TBD', priority: 'Low', category: 'integration',
+    desc: 'Declination category capture — when RFQLI → declined, capture structured declination_category (appetite, class_of_business, loss_history, etc.) from email classification.',
+    owner: 'Sushant', blockedBy: null, status: 'planned',
+    entities: ['RFQLineItem'],
+    note: 'Enables remarketing intelligence — operators see WHY carriers declined to target the right E&S markets.'
+  },
+];
+
+const STATUS_STYLES = {
+  'todo':        { label: 'Todo', bg: 'var(--surface2)', color: 'var(--text-dim)' },
+  'in-progress': { label: 'In Progress', bg: 'var(--accent-dim)', color: 'var(--accent)' },
+  'blocked':     { label: 'Blocked', bg: 'var(--red-dim)', color: 'var(--red)' },
+  'planned':     { label: 'Planned', bg: 'var(--yellow-dim)', color: 'var(--yellow)' },
+  'done':        { label: 'Done', bg: 'var(--green-dim)', color: 'var(--green)' },
+};
+
+const PRIORITY_STYLES = {
+  'Urgent': { color: 'var(--red)', weight: '700' },
+  'High':   { color: 'var(--orange)', weight: '600' },
+  'Medium': { color: 'var(--yellow)', weight: '400' },
+  'Low':    { color: 'var(--text-dim)', weight: '400' },
+};
+
+function buildWorkItems() {
+  // Render fields
+  const fieldsEl = document.getElementById('wi-fields');
+  fieldsEl.innerHTML = WI_FIELDS.map(f => `
+    <div style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.4); align-items:flex-start;">
+      <span style="font-weight:600; color:var(--text); min-width:120px;">${f.name}</span>
+      <span style="color:var(--text-dim); min-width:120px; font-size:11px;">${f.type}</span>
+      ${f.note ? `<span style="color:var(--text-dim); font-size:10px; font-style:italic;">${f.note}</span>` : ''}
+    </div>
+  `).join('');
+
+  // Render kinds
+  const kindsEl = document.getElementById('wi-kinds');
+  kindsEl.innerHTML = WI_KINDS.map(k => `
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px; font-weight:600; color:${k.color}; margin-bottom:4px;">${k.kind}</div>
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:6px;">${k.desc}</div>
+      ${k.scopes.map(s => `
+        <div style="padding:4px 8px; margin:3px 0; background:var(--surface2); border-radius:4px; font-size:11px;">
+          <span style="color:var(--purple); font-weight:600;">entity_type=${s.entity}</span>
+          <span style="color:var(--text-dim);"> · ${s.phase}</span>
+          <span style="color:var(--text-dim); font-size:10px;"> · was: ${s.legacy}</span>
+          <div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${s.note}</div>
+        </div>
+      `).join('')}
+      ${k.extraStatuses ? `<div style="font-size:10px; color:var(--orange); margin-top:4px;">Extra statuses: ${k.extraStatuses.join(', ')}</div>` : ''}
+      ${k.extraFields ? `<div style="font-size:10px; color:var(--cyan); margin-top:2px;">Extra metadata: ${k.extraFields.join(', ')}</div>` : ''}
+    </div>
+  `).join('');
+
+  // Render statuses
+  const statusEl = document.getElementById('wi-statuses');
+  const typeColors = { 'initial':'var(--accent)', 'active':'var(--text)', 'parked':'var(--yellow)', 'terminal':'var(--red)', 'terminal-win':'var(--green)' };
+  statusEl.innerHTML = `
+    <div style="font-size:11px; font-weight:600; color:var(--text-dim); margin-bottom:6px;">Universal (assignment + task):</div>
+    ${WI_STATUSES.map(s => `
+      <div style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.4);">
+        <span style="font-weight:600; color:${typeColors[s.type]}; min-width:100px;">${s.val}</span>
+        <span style="color:var(--text-dim); font-size:11px;">${s.def}</span>
+      </div>
+    `).join('')}
+    <div style="font-size:11px; font-weight:600; color:var(--text-dim); margin-top:12px; margin-bottom:6px;">Order Tasks (extended):</div>
+    ${WI_ORDER_STATUSES.map(s => `
+      <div style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.4);">
+        <span style="font-weight:600; color:${typeColors[s.type]}; min-width:100px;">${s.val}</span>
+        <span style="color:var(--text-dim); font-size:11px;">${s.def}</span>
+      </div>
+    `).join('')}
+  `;
+
+  // Render relationships
+  const relEl = document.getElementById('wi-relationships');
+  const phases = [
+    { name: 'Intake', entity: 'opportunity', color: 'var(--cyan)', assignment: true, tasks: true },
+    { name: 'Submission', entity: 'submission_intent', color: 'var(--accent)', assignment: true, tasks: true },
+    { name: 'Placement', entity: '???', color: 'var(--yellow)', assignment: false, tasks: false, gap: true },
+    { name: 'Sales / Order', entity: 'order', color: 'var(--orange)', assignment: false, tasks: true, orderTasks: true },
+    { name: 'Renewal', entity: 'renewal_intent', color: 'var(--green)', assignment: true, tasks: true },
+  ];
+  relEl.innerHTML = phases.map(p => `
+    <div style="padding:12px; border-radius:8px; border:1px solid ${p.gap ? 'var(--yellow)' : 'var(--border)'}; background:var(--surface); min-width:150px; ${p.gap ? 'border-style:dashed;' : ''}">
+      <div style="font-size:12px; font-weight:600; color:${p.color}; margin-bottom:6px;">${p.name}</div>
+      <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px;">entity_type: ${p.entity}</div>
+      ${p.assignment ? '<div style="font-size:11px;"><span class="badge initial" style="font-size:10px;">assignment</span> 1:1</div>' : ''}
+      ${p.tasks ? '<div style="font-size:11px; margin-top:3px;"><span class="badge active" style="font-size:10px;">task</span> 1:N</div>' : ''}
+      ${p.orderTasks ? '<div style="font-size:11px; margin-top:3px;"><span class="badge parked" style="font-size:10px;">order_task</span> 1:N (structured steps)</div>' : ''}
+      ${p.gap ? '<div style="font-size:10px; color:var(--yellow); margin-top:6px; font-style:italic;">No work items yet — gap to fill</div>' : ''}
+    </div>
+  `).join('<span style="color:var(--text-dim); font-size:18px; align-self:center;">→</span>');
+
+  // Render migration table
+  const migBody = document.getElementById('wi-migration-body');
+  migBody.innerHTML = WI_MIGRATIONS.map(m => `
+    <tr>
+      <td style="color:var(--red); text-decoration:line-through; font-size:11px;">${m.legacy}</td>
+      <td style="font-size:11px;">${m.unified}</td>
+      <td style="font-size:10px; color:var(--text-dim);">${m.metadata}</td>
+    </tr>
+  `).join('');
+
+  // Render planned placement work items
+  const plannedEl = document.getElementById('wi-planned-placement');
+  plannedEl.innerHTML = WI_PLANNED_PLACEMENT.map(p => `
+    <div style="padding:8px 12px; margin:6px 0; border-radius:6px; border:1px solid var(--border); border-left:3px solid var(--yellow); background:var(--surface2);">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:12px; font-weight:600;">${p.title}</span>
+        <span style="font-size:10px; color:var(--orange);">${p.priority}</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">${p.desc}</div>
+    </div>
+  `).join('');
+}
+
+buildWorkItems();
 
 </script>
 </body>
