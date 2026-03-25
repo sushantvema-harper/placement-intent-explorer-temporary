@@ -1184,23 +1184,52 @@
 <!-- ═══════════════════════════════════════════ -->
 <div class="panel" id="panel-miniorq">
   <!-- Section 1: Architecture Overview -->
-  <h2 style="font-size:16px; margin-bottom:8px;">Placements MiniOrq — Agora as Orchestrator</h2>
+  <h2 style="font-size:16px; margin-bottom:8px;">Placements MiniOrq — 4-Layer Architecture</h2>
   <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
-    Agora acts as a "MiniOrq" (mini orchestrator) for placement transitions: it consumes signals from multiple sources,
-    resolves the target placement intent, determines the correct state transition, and calls the CLS API to execute it.
-    CLS remains the single source of truth for state; Agora is the decision-maker.
+    The placement orchestration pipeline has four layers: <strong>Zephyrus</strong> (email pipeline / event source),
+    <strong>CASHMONEY / Antares</strong> (sales service — quote materialization, OLI resolution, RFQ matching),
+    <strong>CLS</strong> (source of truth — emits lifecycle events), and <strong>Agora / MiniOrq</strong> (placement orchestrator — consumes CLS lifecycle events, transitions PI).
+    CASHMONEY handles quote creation + RFQLI transitions. Agora/MiniOrq handles PI transitions. They coordinate through CLS state + Relay events, NOT direct calls.
   </p>
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
-    Architecture: Signal Source → <strong>MiniOrq / Agora</strong> → CLS → Relay outbox
+    Architecture: Zephyrus → <strong>CASHMONEY / Antares</strong> → CLS → <strong>Agora / MiniOrq</strong>
   </p>
 
-  <!-- Three-layer architecture diagram -->
+  <!-- Four-layer architecture diagram -->
   <div id="miniorq-arch" style="display:flex; gap:16px; margin-bottom:32px; flex-wrap:wrap;"></div>
+
+  <!-- CASHMONEY / Antares Section -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--cyan);">CASHMONEY / Antares (Sales Service)</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    CASHMONEY is the sales service that sits between Zephyrus and CLS. It materializes quotes, matches them to RFQs,
+    and transitions RFQLIs. It does <strong>NOT</strong> touch PlacementIntent — that is Agora's domain.
+  </p>
+  <div style="background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--cyan); border-radius:8px; padding:16px; max-width:900px; margin-bottom:32px;">
+    <div style="font-size:12px; font-weight:700; color:var(--cyan); margin-bottom:12px;">Responsibilities</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px; color:var(--text-dim);">
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Creates Quote entities in CLS via POST /quotes</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Matches quotes to RFQs via RFQMatcher (carrier + OLI matching)</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Transitions RFQLIs to "quoted" via POST /rfq-items/{id}/transition</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Validates coverage lines against OLIs (domain.ValidateQuoteAgainstOLIs)</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Handles invoice creation, PFA generation, order creation</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Emits antares.* signals to Son of Atlas/MiniOrq via Relay</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Consumes zephyrus.sales.* events from relay.zephyrus topic</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Does NOT touch PlacementIntent — that is Agora's domain</div>
+    </div>
+    <div style="font-size:12px; font-weight:700; color:var(--cyan); margin-top:16px; margin-bottom:8px;">Key Signals Emitted (antares.*)</div>
+    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+      <code style="font-size:10px; background:rgba(34,211,238,0.1); color:var(--cyan); padding:3px 8px; border-radius:4px;">antares.coverage.selected</code>
+      <code style="font-size:10px; background:rgba(34,211,238,0.1); color:var(--cyan); padding:3px 8px; border-radius:4px;">antares.invoice.create</code>
+      <code style="font-size:10px; background:rgba(34,211,238,0.1); color:var(--cyan); padding:3px 8px; border-radius:4px;">antares.invoice.send</code>
+      <code style="font-size:10px; background:rgba(34,211,238,0.1); color:var(--cyan); padding:3px 8px; border-radius:4px;">antares.invoice.accept</code>
+      <code style="font-size:10px; background:rgba(34,211,238,0.1); color:var(--cyan); padding:3px 8px; border-radius:4px;">antares.invoice.acceptance_blocked</code>
+    </div>
+  </div>
 
   <!-- Section 2: Signal Sources -->
   <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Signal Sources</h3>
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
-    Click a card to expand details about each signal source that feeds into MiniOrq.
+    Click a card to expand details about each signal source that feeds into the pipeline.
   </p>
   <div id="miniorq-signals" style="display:flex; flex-direction:column; gap:8px; max-width:900px; margin-bottom:32px;"></div>
 
@@ -1213,13 +1242,15 @@
   <div id="miniorq-flows" style="display:flex; flex-direction:column; gap:12px; max-width:1000px; margin-bottom:32px;"></div>
 
   <!-- Section 4: CLS API Reference -->
-  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">CLS API Reference (MiniOrq Endpoints)</h3>
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">CLS API Reference (Placement Pipeline)</h3>
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
-    The specific CLS endpoints MiniOrq calls during placement orchestration.
+    CLS endpoints used during placement orchestration. <strong>CASHMONEY</strong> is the primary caller for
+    POST /quotes (quote creation) and POST /rfq-items/{id}/transition (RFQLI transitions).
+    <strong>Agora/MiniOrq</strong> is the primary caller for POST /placements/{id}/transition (PI transitions).
   </p>
   <div style="overflow-x:auto; margin-bottom:32px;">
     <table class="rules-table" style="max-width:900px;">
-      <thead><tr><th>API</th><th>Method</th><th>Endpoint</th><th>When</th></tr></thead>
+      <thead><tr><th>API</th><th>Method</th><th>Endpoint</th><th>Primary Caller</th><th>When</th></tr></thead>
       <tbody id="miniorq-api-body"></tbody>
     </table>
   </div>
@@ -4890,34 +4921,45 @@ buildHarperClaw();
 
 const MINIORQ_ARCH_LAYERS = [
   {
-    title: 'Signal Sources',
+    title: 'Zephyrus (Email Pipeline)',
     color: 'var(--orange)',
     items: [
-      'Relay lifecycle events (CLS transitions)',
-      'Zephyrus email classifications (comms.*)',
-      'Operator actions (MegaBro → CLS)',
-      'Harper-claw signals (future)'
+      'Bronze→Silver email processing',
+      'Hermes classification (INSURANCE_QUOTE, DECLINE, etc.)',
+      'Emits to relay.zephyrus topic',
+      'zephyrus.sales.quote_received, etc.'
     ]
   },
   {
-    title: 'MiniOrq / Agora',
-    color: 'var(--accent)',
+    title: 'CASHMONEY / Antares (Sales Service)',
+    color: 'var(--cyan)',
     items: [
-      '1. Consume signal',
-      '2. Look up current state',
-      '3. Decide transition target',
-      '4. Call CLS transition API',
-      '5. Emit side-effect events'
+      'Consumes relay.zephyrus events',
+      'Quote materialization (POST /quotes)',
+      'OLI resolution + RFQMatcher',
+      'RFQLI transitions (POST /rfq-items/{id}/transition)',
+      'Emits antares.* signals via Relay'
     ]
   },
   {
-    title: 'CLS',
+    title: 'CLS (Source of Truth)',
     color: 'var(--green)',
     items: [
       'Validate transition legality',
-      'Update entity state',
-      'Derive dependent statuses (RFQLI, OLI)',
-      'Emit to Relay outbox'
+      'Update entity state (Quote, RFQLI, PI)',
+      'Derive dependent statuses',
+      'Emit lifecycle.entity.transitioned to relay.lifecycle'
+    ]
+  },
+  {
+    title: 'Agora / MiniOrq (Placement Orchestrator)',
+    color: 'var(--accent)',
+    items: [
+      'Consumes relay.lifecycle events',
+      'Look up PI for transitioned RFQLI',
+      'Decide PI transition target',
+      'POST /placements/{pi_id}/transition',
+      'Side-effect events + notifications'
     ]
   }
 ];
@@ -4928,26 +4970,39 @@ const MINIORQ_SIGNALS = [
     title: 'Relay relay.lifecycle topic',
     subtitle: 'CLS → Agora',
     color: 'var(--accent)',
-    summary: 'CLS emits lifecycle.entity.transitioned events whenever any entity changes state. Agora consumes these for side effects and cascading logic.',
+    summary: 'CLS emits lifecycle.entity.transitioned events whenever any entity changes state. Agora consumes these for PI transitions and cascading logic.',
     details: [
       { label: 'Consumer group', value: 'agora-consumer' },
       { label: 'Message type', value: 'lifecycle.entity.transitioned' },
       { label: 'Schema', value: '{transition_id, entity_type, entity_id, from_status, to_status, triggered_by, opportunity_id, occurred_at}' },
-      { label: 'Currently handled', value: 'coverage_intent (intake→submission), submission_intent (→cancelled), placement_intent (→cancelled)' },
-      { label: 'NEW for MiniOrq', value: 'placement_intent ALL transitions, rfq_line_item transitions' }
+      { label: 'Key entities', value: 'rfq_line_item (quoted → triggers PI transition), quote (selected → triggers PI approved_quote), placement_intent (all transitions)' },
+      { label: 'Primary trigger', value: 'When CASHMONEY transitions an RFQLI to "quoted", CLS emits lifecycle event → Agora consumes → transitions PI' }
     ]
   },
   {
-    id: 'zephyrus-emails',
-    title: 'Zephyrus Email Classifications',
-    subtitle: 'via Relay comms.* topics',
+    id: 'relay-zephyrus',
+    title: 'Relay relay.zephyrus topic',
+    subtitle: 'Zephyrus → CASHMONEY',
     color: 'var(--purple)',
-    summary: 'Zephyrus processes inbound emails through its Bronze→Silver pipeline and emits classifications that trigger PI transitions.',
+    summary: 'Zephyrus processes inbound emails through its Bronze→Silver pipeline and emits sales-related events to relay.zephyrus. CASHMONEY (not Agora) consumes these.',
     details: [
-      { label: 'comms.quote', value: 'INSURANCE_QUOTE, INSURANCE_DECLINE, QUOTE_REJECTED' },
-      { label: 'comms.placement', value: 'SUBMISSION, SUBMISSION_TO_QUOTE' },
-      { label: 'Schema', value: 'Email classification with matched_opportunity_id, matched_company_id, classification_raw' },
-      { label: 'Key role', value: 'These are the primary signals that trigger PI transitions in the automated flow' }
+      { label: 'Events', value: 'zephyrus.sales.quote_received, zephyrus.sales.decline_received, zephyrus.sales.info_requested' },
+      { label: 'Consumer', value: 'CASHMONEY / Antares (NOT Agora — Agora consumes lifecycle events downstream)' },
+      { label: 'Schema', value: 'Email classification with matched_opportunity_id, matched_company_id, artifact_id, classification_raw' },
+      { label: 'Key insight', value: 'Zephyrus events go to CASHMONEY first for quote materialization; Agora only sees the resulting CLS lifecycle events' }
+    ]
+  },
+  {
+    id: 'cashmoney-antares',
+    title: 'CASHMONEY / Antares Signals',
+    subtitle: 'CASHMONEY → Son of Atlas / MiniOrq via Relay',
+    color: 'var(--cyan)',
+    summary: 'CASHMONEY emits antares.* signals via Relay for downstream processing by Son of Atlas (validation) and MiniOrq (placement orchestration).',
+    details: [
+      { label: 'Topic', value: 'relay.sales (antares.* events)' },
+      { label: 'antares.coverage.selected', value: 'Coverage line selected for a quote — triggers validation via Son of Atlas' },
+      { label: 'antares.invoice.*', value: 'antares.invoice.create, antares.invoice.send, antares.invoice.accept, antares.invoice.acceptance_blocked' },
+      { label: 'Key insight', value: 'CASHMONEY creates Quotes and transitions RFQLIs; Agora only handles PI transitions based on resulting lifecycle events' }
     ]
   },
   {
@@ -4980,47 +5035,46 @@ const MINIORQ_SIGNALS = [
 const MINIORQ_FLOWS = [
   {
     id: 'quote-received',
-    title: 'Flow 1: Quote Received (Email → PI Transition)',
-    description: 'An insurance quote email arrives and triggers PI state change to quote_received.',
+    title: 'Flow 1: Quote Received (Email → CASHMONEY → CLS → Agora)',
+    description: 'An insurance quote email arrives. CASHMONEY materializes the quote and transitions RFQLI. Agora transitions PI.',
     steps: [
       { num: 1, text: 'Email arrives in Gmail from carrier underwriter', type: 'external' },
       { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email (extraction, enrichment)', type: 'external' },
       { num: 3, text: 'Hermes classifies email: INSURANCE_QUOTE', type: 'external' },
-      { num: 4, text: 'Zephyrus emits to Relay: comms.quote + comms.email topics', type: 'relay' },
-      { num: 5, text: 'MiniOrq (Agora) consumes comms.quote event', type: 'internal' },
-      { num: 6, text: 'MiniOrq extracts: matched_opportunity_id, classification_raw.quote_details', type: 'internal' },
-      { num: 7, text: 'MiniOrq queries CLS: GET /opportunities/{opp_id}/rfqs → find matching RFQ by carrier/UW', type: 'cls' },
-      { num: 8, text: 'MiniOrq queries CLS: GET /rfqs/{rfq_id}/items → find RFQLI for this coverage', type: 'cls' },
-      { num: 9, text: 'MiniOrq looks up PI for this RFQLI: GET /placements/{pi_id}', type: 'cls' },
-      { num: 10, text: 'MiniOrq determines target state: submitted/under_review → quote_received', type: 'internal' },
-      { num: 11, text: 'MiniOrq calls CLS: POST /placements/{pi_id}/transition {status: "quote_received"}', type: 'cls' },
-      { num: 12, text: 'CLS validates transition, updates PI, derives RFQLI status, emits to Relay outbox', type: 'cls' },
-      { num: 13, text: 'Quote entity created: POST /quotes {account_id, opportunity_id, ...quote_details}', type: 'cls' }
+      { num: 4, text: 'Zephyrus emits to Relay: zephyrus.sales.quote_received on relay.zephyrus topic', type: 'relay' },
+      { num: 5, text: 'CASHMONEY consumes event from relay.zephyrus topic', type: 'internal' },
+      { num: 6, text: 'CASHMONEY calls Aether to extract quote details from artifact', type: 'internal' },
+      { num: 7, text: 'CASHMONEY validates coverage lines against OLIs (domain.ValidateQuoteAgainstOLIs)', type: 'internal' },
+      { num: 8, text: 'CASHMONEY creates Quote in CLS: POST /quotes {account_id, opportunity_id, coverage_lines, ...}', type: 'cls' },
+      { num: 9, text: 'CASHMONEY matches quote to RFQ via RFQMatcher (carrier + OLI matching)', type: 'internal' },
+      { num: 10, text: 'CASHMONEY transitions RFQLI: POST /rfq-items/{id}/transition {status: "quoted"}', type: 'cls' },
+      { num: 11, text: 'CLS emits lifecycle.entity.transitioned event to relay.lifecycle (RFQLI quoted)', type: 'relay' },
+      { num: 12, text: 'Agora/MiniOrq consumes lifecycle event from relay.lifecycle', type: 'internal' },
+      { num: 13, text: 'MiniOrq looks up PI for this RFQLI', type: 'internal' },
+      { num: 14, text: 'MiniOrq transitions PI: POST /placements/{pi_id}/transition {status: "quote_received"}', type: 'cls' },
+      { num: 15, text: 'CLS validates PI transition, emits lifecycle event', type: 'cls' }
     ]
   },
   {
     id: 'carrier-decline',
-    title: 'Flow 2: Carrier Decline (Email → PI Declined)',
-    description: 'Carrier sends a decline email, triggering PI transition to declined state.',
+    title: 'Flow 2: Carrier Decline (Email → RFQLI declined → PI declined)',
+    description: 'Carrier sends a decline email. RFQLI is declined; Agora transitions PI and checks for remarketing.',
     steps: [
       { num: 1, text: 'Email arrives in Gmail — carrier decline notice', type: 'external' },
       { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email', type: 'external' },
       { num: 3, text: 'Hermes classifies email: INSURANCE_DECLINE', type: 'external' },
-      { num: 4, text: 'Zephyrus emits to Relay: comms.quote topic (category: INSURANCE_DECLINE)', type: 'relay' },
-      { num: 5, text: 'MiniOrq (Agora) consumes comms.quote event', type: 'internal' },
-      { num: 6, text: 'MiniOrq extracts decline reason from classification_raw', type: 'internal' },
-      { num: 7, text: 'MiniOrq queries CLS: GET /opportunities/{opp_id}/rfqs → match RFQ', type: 'cls' },
-      { num: 8, text: 'MiniOrq queries CLS: GET /rfqs/{rfq_id}/items → find RFQLI', type: 'cls' },
-      { num: 9, text: 'MiniOrq looks up PI: GET /placements/{pi_id}', type: 'cls' },
-      { num: 10, text: 'MiniOrq determines target state: → declined', type: 'internal' },
-      { num: 11, text: 'MiniOrq calls CLS: POST /placements/{pi_id}/transition {status: "declined"}', type: 'cls' },
-      { num: 12, text: 'CLS checks if ALL PIs for this OLI are declined → if so, flags for remarketing', type: 'cls' }
+      { num: 4, text: 'Zephyrus emits to Relay: zephyrus.sales.decline_received on relay.zephyrus topic', type: 'relay' },
+      { num: 5, text: 'CASHMONEY or Agora consumes event (TBD — decline may not go through CASHMONEY)', type: 'internal' },
+      { num: 6, text: 'RFQLI transition: POST /rfq-items/{id}/transition {status: "declined", declination_category: "..."}', type: 'cls' },
+      { num: 7, text: 'CLS emits lifecycle.entity.transitioned event to relay.lifecycle', type: 'relay' },
+      { num: 8, text: 'MiniOrq consumes lifecycle event, transitions PI: POST /placements/{pi_id}/transition {status: "declined"}', type: 'cls' },
+      { num: 9, text: 'MiniOrq checks: are ALL PIs for this OLI declined? If yes → flag for remarketing', type: 'internal' }
     ]
   },
   {
     id: 'operator-pause',
     title: 'Flow 3: Operator Pause (Manual → PI on_hold)',
-    description: 'Operator manually pauses a placement intent via MegaBro dashboard.',
+    description: 'Operator manually pauses a placement intent via MegaBro dashboard. CASHMONEY is NOT involved.',
     steps: [
       { num: 1, text: 'Operator clicks "Pause" on MegaBro /placements page', type: 'external' },
       { num: 2, text: 'MegaBro calls CLS: POST /placements/{pi_id}/transition {status: "on_hold"}', type: 'cls' },
@@ -5032,13 +5086,13 @@ const MINIORQ_FLOWS = [
   {
     id: 'info-requested',
     title: 'Flow 4: Info Requested (Email → PI info_requested)',
-    description: 'Underwriter asks for additional documents, triggering info_requested state and a work item.',
+    description: 'Underwriter asks for additional documents. This is a placement-level event — CASHMONEY is NOT involved.',
     steps: [
       { num: 1, text: 'Email arrives in Gmail — UW requests additional documents', type: 'external' },
       { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email', type: 'external' },
-      { num: 3, text: 'Hermes classifies email: SUBMISSION_TO_QUOTE', type: 'external' },
-      { num: 4, text: 'Zephyrus emits to Relay: comms.placement topic', type: 'relay' },
-      { num: 5, text: 'MiniOrq (Agora) consumes comms.placement event', type: 'internal' },
+      { num: 3, text: 'Hermes classifies email: SUBMISSION_TO_QUOTE (sub-classification: info request)', type: 'external' },
+      { num: 4, text: 'Zephyrus emits to Relay: comms.placement topic (placement-level, NOT sales-level)', type: 'relay' },
+      { num: 5, text: 'MiniOrq (Agora) consumes comms.placement event directly (CASHMONEY NOT involved)', type: 'internal' },
       { num: 6, text: 'MiniOrq determines: UW is asking for documents (sub-classification)', type: 'internal' },
       { num: 7, text: 'MiniOrq queries CLS: GET /opportunities/{opp_id}/rfqs → match RFQ', type: 'cls' },
       { num: 8, text: 'MiniOrq queries CLS: GET /rfqs/{rfq_id}/items → find RFQLI', type: 'cls' },
@@ -5049,44 +5103,50 @@ const MINIORQ_FLOWS = [
   },
   {
     id: 'quote-validation',
-    title: 'Flow 5: Quote Validation (PI quote_received → approved_quote)',
-    description: 'After quote receipt, the validation and approval flow that advances PI to approved_quote.',
+    title: 'Flow 5: Quote Validation (CASHMONEY → Son of Atlas → Operator → Agora)',
+    description: 'After CASHMONEY creates a quote, validation and approval flow advances PI to approved_quote.',
     steps: [
-      { num: 1, text: 'PI is in quote_received state; Quote entity exists with extracted terms', type: 'internal' },
-      { num: 2, text: 'System validation runs (automated extraction checks on quote details)', type: 'internal' },
-      { num: 3, text: 'POST /quotes/{quote_id}/transition {status: "pending_decision"} — passes validation', type: 'cls' },
-      { num: 4, text: 'Operator reviews quote on MegaBro dashboard, approves it', type: 'external' },
-      { num: 5, text: 'POST /quotes/{quote_id}/transition {status: "selected"} — operator approval', type: 'cls' },
-      { num: 6, text: 'MiniOrq detects quote selected → POST /placements/{pi_id}/transition {status: "approved_quote"}', type: 'cls' },
-      { num: 7, text: 'CLS Process Manager advances Coverage Intent: placement → sales phase', type: 'cls' }
+      { num: 1, text: 'CASHMONEY created Quote in CLS (status: pending_validation)', type: 'cls' },
+      { num: 2, text: 'CASHMONEY validated OLI coverage mapping', type: 'internal' },
+      { num: 3, text: 'CASHMONEY emits antares.coverage.selected signal via Relay', type: 'relay' },
+      { num: 4, text: 'Son of Atlas / validation agent processes the signal', type: 'internal' },
+      { num: 5, text: 'Validation result written to Quote.Verification JSONB', type: 'cls' },
+      { num: 6, text: 'Quote transitioned: POST /quotes/{id}/transition {status: "pending_decision"} or {status: "invalid"}', type: 'cls' },
+      { num: 7, text: 'CLS emits lifecycle.entity.transitioned event to relay.lifecycle', type: 'relay' },
+      { num: 8, text: 'If pending_decision: operator reviews on MegaBro, selects quote', type: 'external' },
+      { num: 9, text: 'POST /quotes/{id}/transition {status: "selected"}', type: 'cls' },
+      { num: 10, text: 'MiniOrq detects quote selected → POST /placements/{pi_id}/transition {status: "approved_quote"}', type: 'cls' },
+      { num: 11, text: 'CLS Process Manager advances Coverage Intent: placement → sales phase', type: 'cls' }
     ]
   }
 ];
 
 const MINIORQ_CLS_APIS = [
-  { api: 'Get RFQs', method: 'GET', endpoint: '/opportunities/{opp_id}/rfqs', when: 'Map email to RFQ by carrier/UW match' },
-  { api: 'Get RFQLI', method: 'GET', endpoint: '/rfqs/{rfq_id}/items', when: 'Find coverage line item for this RFQ' },
-  { api: 'Get PI', method: 'GET', endpoint: '/placements/{pi_id}', when: 'Check current PI state before transition' },
-  { api: 'Transition PI', method: 'POST', endpoint: '/placements/{pi_id}/transition', when: 'Execute placement intent state change' },
-  { api: 'Create Quote', method: 'POST', endpoint: '/quotes', when: 'New quote from email extraction' },
-  { api: 'Transition Quote', method: 'POST', endpoint: '/quotes/{quote_id}/transition', when: 'Quote validation flow progression' },
-  { api: 'Link Quote', method: 'POST', endpoint: '/quotes/{quote_id}/line-items/link', when: 'Associate quote with RFQLI' },
-  { api: 'Get Intents', method: 'GET', endpoint: '/opportunities/{opp_id}/intents', when: 'Coverage Intent lookup for process manager' }
+  { api: 'Get RFQs', method: 'GET', endpoint: '/opportunities/{opp_id}/rfqs', when: 'Map email to RFQ by carrier/UW match', caller: 'CASHMONEY / Agora' },
+  { api: 'Get RFQLI', method: 'GET', endpoint: '/rfqs/{rfq_id}/items', when: 'Find coverage line item for this RFQ', caller: 'CASHMONEY / Agora' },
+  { api: 'Get PI', method: 'GET', endpoint: '/placements/{pi_id}', when: 'Check current PI state before transition', caller: 'Agora' },
+  { api: 'Transition PI', method: 'POST', endpoint: '/placements/{pi_id}/transition', when: 'Execute placement intent state change', caller: 'Agora (primary)' },
+  { api: 'Create Quote', method: 'POST', endpoint: '/quotes', when: 'New quote from email extraction / materialization', caller: 'CASHMONEY (primary)' },
+  { api: 'Transition Quote', method: 'POST', endpoint: '/quotes/{quote_id}/transition', when: 'Quote validation flow progression', caller: 'CASHMONEY / MegaBro' },
+  { api: 'Link Quote', method: 'POST', endpoint: '/quotes/{quote_id}/line-items/link', when: 'Associate quote with RFQLI', caller: 'CASHMONEY' },
+  { api: 'Transition RFQLI', method: 'POST', endpoint: '/rfq-items/{id}/transition', when: 'RFQLI status change (quoted, declined)', caller: 'CASHMONEY (primary)' },
+  { api: 'Get Intents', method: 'GET', endpoint: '/opportunities/{opp_id}/intents', when: 'Coverage Intent lookup for process manager', caller: 'Agora' }
 ];
 
 const MINIORQ_RELAY_TOPICS = [
-  { topic: 'relay.lifecycle', direction: 'CLS → Agora', events: 'lifecycle.entity.transitioned', consumer: 'agora-consumer' },
+  { topic: 'relay.lifecycle', direction: 'CLS → Agora / MiniOrq', events: 'lifecycle.entity.transitioned (RFQLI, Quote, PI)', consumer: 'agora-consumer' },
+  { topic: 'relay.zephyrus', direction: 'Zephyrus → CASHMONEY', events: 'zephyrus.sales.quote_received, zephyrus.sales.decline_received', consumer: 'cashmoney-consumer' },
+  { topic: 'relay.sales', direction: 'CASHMONEY → Son of Atlas / MiniOrq', events: 'antares.coverage.selected, antares.invoice.*', consumer: 'agora-consumer / sonatlas-consumer' },
   { topic: 'relay.submissions', direction: 'Agora → consumers', events: 'submissions.packet.*', consumer: 'various' },
-  { topic: 'comms.quote', direction: 'Zephyrus → consumers', events: 'INSURANCE_QUOTE, INSURANCE_DECLINE', consumer: 'TBD' },
-  { topic: 'comms.placement', direction: 'Zephyrus → consumers', events: 'SUBMISSION, SUBMISSION_TO_QUOTE', consumer: 'TBD' },
+  { topic: 'comms.placement', direction: 'Zephyrus → Agora (directly)', events: 'SUBMISSION_TO_QUOTE (info requests — placement-level, not sales-level)', consumer: 'agora-consumer' },
   { topic: 'TBD (placement signals)', direction: 'Harper-claw → Agora', events: 'placement.quote_received, placement.quote_declined', consumer: 'TBD' }
 ];
 
 const STEP_TYPE_STYLES = {
-  external: { color: 'var(--orange)', label: 'EXTERNAL', bg: 'rgba(251,146,60,0.08)', border: 'var(--orange)' },
-  relay:    { color: 'var(--accent)', label: 'RELAY',    bg: 'rgba(108,140,255,0.08)', border: 'var(--accent)' },
-  internal: { color: 'var(--purple)', label: 'INTERNAL', bg: 'rgba(167,139,250,0.08)', border: 'var(--purple)' },
-  cls:      { color: 'var(--green)',  label: 'CLS API',  bg: 'rgba(74,222,128,0.08)',  border: 'var(--green)' }
+  external:  { color: 'var(--orange)', label: 'EXTERNAL',  bg: 'rgba(251,146,60,0.08)', border: 'var(--orange)' },
+  relay:     { color: 'var(--accent)', label: 'RELAY',     bg: 'rgba(108,140,255,0.08)', border: 'var(--accent)' },
+  internal:  { color: 'var(--purple)', label: 'INTERNAL',  bg: 'rgba(167,139,250,0.08)', border: 'var(--purple)' },
+  cls:       { color: 'var(--green)',  label: 'CLS API',   bg: 'rgba(74,222,128,0.08)',  border: 'var(--green)' }
 };
 
 function buildMiniOrq() {
@@ -5097,7 +5157,7 @@ function buildMiniOrq() {
       ? '<div style="display:flex; align-items:center; font-size:20px; color:var(--text-dim); padding:0 4px;">→</div>'
       : '';
     return `
-      <div style="flex:1; min-width:220px; padding:16px; background:var(--surface); border:1px solid var(--border); border-top:3px solid ${layer.color}; border-radius:8px;">
+      <div style="flex:1; min-width:180px; padding:16px; background:var(--surface); border:1px solid var(--border); border-top:3px solid ${layer.color}; border-radius:8px;">
         <div style="font-size:13px; font-weight:700; color:${layer.color}; margin-bottom:10px;">${layer.title}</div>
         ${layer.items.map(item => `
           <div style="font-size:11px; color:var(--text-dim); padding:3px 0; border-bottom:1px solid rgba(45,51,72,0.3);">${item}</div>
@@ -5174,6 +5234,7 @@ function buildMiniOrq() {
       <td style="font-weight:600;">${a.api}</td>
       <td><code style="color:${a.method === 'GET' ? 'var(--accent)' : 'var(--green)'};">${a.method}</code></td>
       <td><code style="font-size:11px;">${a.endpoint}</code></td>
+      <td style="font-size:11px; color:${a.caller.includes('CASHMONEY') ? 'var(--cyan)' : 'var(--accent)'};">${a.caller}</td>
       <td style="color:var(--text-dim); font-size:11px;">${a.when}</td>
     </tr>
   `).join('');
