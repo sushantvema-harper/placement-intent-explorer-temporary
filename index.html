@@ -1028,6 +1028,20 @@
 <!-- ═══════════════════════════════════════════ -->
 <div class="panel" id="panel-pi-v2">
   <h2 style="font-size:16px; margin-bottom:8px;">PlacementIntent v2 — Proposed State Machine</h2>
+
+  <!-- IN-PLACE EVOLUTION NOTE -->
+  <div style="padding:14px 18px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.35); border-left:5px solid var(--yellow); border-radius:6px; max-width:860px; margin-bottom:16px;">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--yellow); margin-bottom:8px;">NOTE: "v2" is a planning label — this is NOT a new entity or table</div>
+    <p style="font-size:11px; color:var(--text); line-height:1.7; margin:0;">
+      <strong>"v2" is used in this tool for planning clarity only.</strong> In implementation, this is an <strong>in-place evolution</strong> of the existing <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">insurance.placement_intent</code> table and <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">PlacementIntentMachine</code> in CLS Go code — <strong>not a new entity, table, or database object.</strong><br><br>
+      The migration path is:
+      <strong>(1)</strong> ALTER the existing <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">insurance.placement_intent</code> table (add columns, rename/add status enum values),
+      <strong>(2)</strong> update the <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">PlacementIntentMachine</code> definition in CLS Go code in-place,
+      <strong>(3)</strong> backfill/migrate any existing rows to the new state values.
+      There is no "PlacementIntent v2" table, schema, or separate entity.
+    </p>
+  </div>
+
   <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
     Redesigned based on Mar 25 sync with Finn and Giridhar. Key change: <strong>RFQLI states are eliminated</strong> — PI IS the source of truth and RFQLI status materializes directly from PI.
     PI scope: from dispatch through quote validation. Binding goes downstream via Quote entity.
@@ -1066,7 +1080,8 @@
         <p style="font-size:12px; color:var(--text-dim);">Click any state node to see details, transitions, and RFQLI materialization.</p>
       </div>
       <div class="info-card" style="overflow:hidden;">
-        <h4>v1 → v2 Migration</h4>
+        <h4>State Machine Migration: v1 → v2 (same table, in-place)</h4>
+        <p style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">These are state value changes on the existing <code style="background:var(--surface2); padding:1px 3px; border-radius:3px;">insurance.placement_intent</code> table — not a table replacement.</p>
         <div style="overflow-x:auto; max-width:100%;">
           <table class="rules-table" style="max-width:100%; table-layout:fixed; word-wrap:break-word;">
             <thead><tr><th style="width:35%;">v1 PI State</th><th style="width:35%;">v2 PI State</th><th style="width:30%;">Change</th></tr></thead>
@@ -7690,7 +7705,7 @@ if (gotchasEl) {
 
 const ENG_PHASES = {
   0: { label: 'Phase 0: Schema Cleanup & Foundation', color: 'var(--cyan)' },
-  1: { label: 'Phase 1: PlacementIntent v2 Implementation', color: 'var(--purple)' },
+  1: { label: 'Phase 1: PlacementIntent State Machine Update', color: 'var(--purple)', note: 'NOTE: "v2" is a planning label used in this tool for clarity. In implementation, this is an IN-PLACE evolution of the existing insurance.placement_intent table and PlacementIntentMachine — NOT a new entity, table, or database object. The migration path is: ALTER the existing table (add columns, update status enum), update the Go PlacementIntentMachine definition in-place, and backfill/migrate existing rows.' },
   2: { label: 'Phase 2: Live RFQ Creation Pipeline', color: 'var(--accent)' },
   3: { label: 'Phase 3: MiniOrq Placement Orchestration', color: 'var(--orange)' },
   4: { label: 'Phase 4: Quote Validation Integration', color: 'var(--yellow)' },
@@ -7889,13 +7904,13 @@ const ENG_TODOS = [
   // ── Phase 1 ────────────────────────────────────────────────────────────────
   {
     phase: 1, seq: 6,
-    title: 'Implement PI v2 state machine in CLS',
-    desc: 'New states: submitted, acknowledged, under_review, info_requested, price_indication, quote_received, approved_quote, disqualified_quote, on_hold, declined, withdrawn, remarketing, rework. Remove from v1: waiting_for_uw, proposal_sent, bound, declined_all, resubmission, cancelled. Proposal_sent/bound move downstream to Quote/SalesIntent.',
+    title: 'Update PlacementIntentMachine in CLS (in-place modification of insurance.placement_intent)',
+    desc: 'IMPORTANT: This is an in-place modification of the existing insurance.placement_intent table and PlacementIntentMachine Go definition — NOT a new table or entity. Implementation: (1) ALTER TABLE insurance.placement_intent to add/rename status enum values, (2) update the PlacementIntentMachine state definition in CLS Go code in-place, (3) backfill existing rows to new state values. New states to add: submitted, acknowledged, under_review, info_requested, price_indication, quote_received, approved_quote, disqualified_quote, on_hold, declined, withdrawn, remarketing, rework. States to remove from v1: waiting_for_uw, proposal_sent, bound, declined_all, resubmission, cancelled. Proposal_sent/bound move downstream to Quote/SalesIntent.',
     services: ['CLS'],
     ticket: 'ENG-1791',
     priority: 'High',
     status: 'In Progress',
-    notes: 'Design doc v4 created. Alignment with Finn + Giridhar completed 2026-03-25. PI v2 tab in this tool documents the full state machine.',
+    notes: 'Design doc v4 created. Alignment with Finn + Giridhar completed 2026-03-25. PI v2 tab in this tool documents the full state machine. "v2" is a planning label in this tool — the implementation modifies insurance.placement_intent and PlacementIntentMachine in place.',
   },
   {
     phase: 1, seq: 7,
@@ -7940,8 +7955,8 @@ const ENG_TODOS = [
 
   {
     phase: 1, seq: 99,
-    title: 'Add direct state columns to PlacementIntent entity',
-    desc: 'Add assigned_to, assigned_by, assigned_at, sla_deadline, sla_started_at to insurance.placement_intent. Entity state should be directly editable in MegaBro UI, not proxied through work items. Per Finn: "as much as possible should be state in the actual CLS objects."',
+    title: 'Add direct state columns to PlacementIntent entity (ALTER TABLE insurance.placement_intent)',
+    desc: 'ALTER TABLE insurance.placement_intent to add: assigned_to, assigned_by, assigned_at, sla_deadline, sla_started_at. Entity state should be directly editable in MegaBro UI, not proxied through work items. Per Finn: "as much as possible should be state in the actual CLS objects." This is an additive migration on the existing table — no new table or entity.',
     services: ['CLS'],
     ticket: null,
     priority: 'High',
@@ -8355,6 +8370,7 @@ const ENG_TODOS = [
           <tr>
             <td colspan="8" style="padding:10px 12px 6px; background:var(--bg); border:1px solid var(--border); border-top:2px solid ${ph.color};">
               <span style="font-size:12px; font-weight:700; color:${ph.color};">${ph.label}</span>
+              ${ph.note ? `<div style="margin-top:6px; padding:7px 12px; background:rgba(251,191,36,0.07); border:1px solid rgba(251,191,36,0.3); border-left:3px solid var(--yellow); border-radius:4px; font-size:11px; color:var(--text); line-height:1.6;">${ph.note}</div>` : ''}
             </td>
           </tr>
         `;
