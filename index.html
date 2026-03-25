@@ -1523,9 +1523,9 @@
       </tbody>
     </table>
     <div style="margin-top:12px; font-size:11px; color:var(--text-dim);">
-      <strong>Table lineage mismatch:</strong> CLS migration 028 planned <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> as the insurance extension tables.
-      MegaBro backfill (commit 92bc4ccb, Finn, 2026-03-17) instead created <code>insurance.request_for_quote</code> + <code>insurance.request_for_quote_line_item</code> — completely different table names.
-      Neither <code>insurance.rfq</code> nor <code>insurance.rfq_line_item_v2</code> exist in production.
+      <strong>Table lineage decision:</strong> CLS migration 028 planned <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> as the insurance extension tables — <strong>these were never applied and will be dropped</strong>.
+      MegaBro backfill (commit 92bc4ccb, Finn, 2026-03-17) created <code>insurance.request_for_quote</code> + <code>insurance.request_for_quote_line_item</code> — these are the <strong>canonical table names going forward</strong>.
+      <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> do not exist in production and will not be created. CLS Go code (<code>quote_repo.go</code>) must be updated to write to <code>insurance.request_for_quote</code> and <code>insurance.request_for_quote_line_item</code>.
       <br><strong>Backfill source:</strong> <code>public.submissions</code> + <code>submission_underwriter_join</code> (BigBrother legacy tables).
     </div>
   </div>
@@ -1546,10 +1546,10 @@
           <tr><td><code>cpq.request_for_quote</code></td><td>10</td><td>25,441</td><td>CLS migration 020 (CPQ layer) + backfill 92bc4ccb</td><td style="color:var(--green);">YES — primary write target</td></tr>
           <tr><td><code>cpq.request_for_quote_line_item</code></td><td>7</td><td>33,150</td><td>CLS migration 027 (line items restructure)</td><td style="color:var(--green);">YES — primary write target</td></tr>
           <tr><td><code>cpq.quote</code></td><td>9</td><td>13,276</td><td>CLS migration 048</td><td style="color:var(--green);">YES</td></tr>
-          <tr><td><code>insurance.request_for_quote</code></td><td>16</td><td>25,441</td><td>MegaBro backfill 92bc4ccb — NOT a CLS migration table</td><td style="color:var(--yellow);">YES — backfill data, schema diverges from CLS design</td></tr>
-          <tr><td><code>insurance.request_for_quote_line_item</code></td><td>12</td><td>33,150</td><td>MegaBro backfill — NOT a CLS migration table</td><td style="color:var(--yellow);">YES — backfill data, missing declination/price_indication columns</td></tr>
-          <tr><td><code>insurance.rfq</code></td><td>—</td><td>—</td><td>CLS migration 028 planned (never applied)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD</td></tr>
-          <tr><td><code>insurance.rfq_line_item_v2</code></td><td>—</td><td>—</td><td>CLS migration 028 planned (never applied)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD</td></tr>
+          <tr><td><code>insurance.request_for_quote</code></td><td>16</td><td>25,441</td><td>MegaBro backfill 92bc4ccb — <strong>CANONICAL going forward</strong></td><td style="color:var(--green);">YES — canonical target; CLS Go code must write here (quote_repo.go update needed)</td></tr>
+          <tr><td><code>insurance.request_for_quote_line_item</code></td><td>12</td><td>33,150</td><td>MegaBro backfill — <strong>CANONICAL going forward</strong></td><td style="color:var(--green);">YES — canonical target; missing declination/price_indication columns (add via migration)</td></tr>
+          <tr><td><code>insurance.rfq</code></td><td>—</td><td>—</td><td>CLS migration 028 planned (never applied) — <strong>WILL BE DROPPED</strong></td><td style="color:var(--red);">DOES NOT EXIST IN PROD — legacy name, superseded by insurance.request_for_quote</td></tr>
+          <tr><td><code>insurance.rfq_line_item_v2</code></td><td>—</td><td>—</td><td>CLS migration 028 planned (never applied) — <strong>WILL BE DROPPED</strong></td><td style="color:var(--red);">DOES NOT EXIST IN PROD — legacy name, superseded by insurance.request_for_quote_line_item</td></tr>
           <tr><td><code>insurance.rfq_line_item</code></td><td>—</td><td>—</td><td>CLS migration 027 intermediate (superseded)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD</td></tr>
           <tr><td><code>insurance.placement_intent</code></td><td>6</td><td>17,060</td><td>CLS migration 124 (created) + 125 (backfill from SI)</td><td style="color:var(--green);">YES — active, 6 columns: id, oli_id, submission_intent_id, status, created_at, updated_at</td></tr>
           <tr><td><code>insurance.instant_quote</code></td><td>19</td><td>0</td><td>CLS migration 018</td><td style="color:var(--red);">EXISTS but EMPTY — vestigial</td></tr>
@@ -1668,12 +1668,12 @@
           <tr>
             <td><code>insurance.rfq</code></td>
             <td>CLS migration 028, Go domain package <code>internal/domain/rfq/</code></td>
-            <td style="color:var(--red);">DOES NOT EXIST. CLS migration 028 defines this table but was never applied. The Go code in <code>internal/domain/rfq/entity.go</code> models the <em>planned</em> schema, not what's in prod.</td>
+            <td style="color:var(--red);">DOES NOT EXIST and will be dropped — this is the legacy CLS name. The canonical table is <code>insurance.request_for_quote</code>. CLS migration 028 was never applied. The Go code in <code>internal/domain/rfq/entity.go</code> must be updated to target <code>insurance.request_for_quote</code>.</td>
           </tr>
           <tr>
             <td><code>insurance.rfq_line_item_v2</code></td>
             <td>CLS migration 028</td>
-            <td style="color:var(--red);">DOES NOT EXIST. Same — migration 028 not applied.</td>
+            <td style="color:var(--red);">DOES NOT EXIST and will be dropped — this is the legacy CLS name. The canonical table is <code>insurance.request_for_quote_line_item</code>. Migration 028 was never applied.</td>
           </tr>
           <tr>
             <td><code>insurance.quote_coverage_line</code></td>
@@ -1700,8 +1700,8 @@
       <ul style="font-size:11px; color:var(--text-dim); line-height:1.9; padding-left:16px;">
         <li><strong>Migration 083 did not fully execute:</strong> 6 legacy task/assignment tables still exist in <code>insurance</code> with 0 rows. Safe to drop, but a cleanup migration is needed.</li>
         <li><strong>Migration 079 never ran:</strong> The entire <code>core.*</code> / <code>insurance.*_ext</code> schema split from migration 079 is absent from production. MegaBro sync references ghost tables from this migration on every poll cycle.</li>
-        <li><strong>Migration 028 never ran:</strong> <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> don't exist. The CLS Go domain model is written against a schema that was never applied.</li>
-        <li><strong>MegaBro backfill (92bc4ccb) created a parallel lineage:</strong> Instead of <code>insurance.rfq</code>, MegaBro populated <code>insurance.request_for_quote</code> — a different table than what CLS migrations planned. These names conflict with the CLS design intent.</li>
+        <li><strong>Migration 028 never ran — and its table names are being retired:</strong> <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> (migration 028) do not exist in production and will be dropped. The canonical tables going forward are <code>insurance.request_for_quote</code> and <code>insurance.request_for_quote_line_item</code>. CLS Go code (<code>quote_repo.go</code>) must be updated to write to these tables.</li>
+        <li><strong>MegaBro backfill (92bc4ccb) used the canonical names:</strong> MegaBro populated <code>insurance.request_for_quote</code> and <code>insurance.request_for_quote_line_item</code> — these are the correct names. The CLS migration 028 names (<code>insurance.rfq</code>, <code>insurance.rfq_line_item_v2</code>) are the legacy ones being removed.</li>
         <li><strong>Singular/plural table name chaos in insurance schema:</strong> At least 5 pairs of (singular, plural) tables exist — one is live, one is empty ghost. Financing agreement, payment, policies, policy_certificate_holder(s), entity_transition(s).</li>
         <li><strong><code>insurance.entity_transition</code> vs <code>insurance.entity_transitions</code>:</strong> Both have exactly 5,881 rows — they may be synced mirror tables or one is a stale duplicate. Needs investigation.</li>
         <li><strong>Test data in production insurance schema:</strong> <code>insurance.sample_accounts</code> (142 rows) and <code>insurance.sample_opportunities</code> (100 rows) should not exist in production.</li>
@@ -1848,14 +1848,14 @@
       • 33,150 RFQ line items in <code>cpq.request_for_quote_line_item</code> + <code>insurance.request_for_quote_line_item</code> (backfill only).<br>
       • 17,060 <code>insurance.placement_intent</code> rows — active and live (created via CLS Process Manager at OLI level, NOT via RFQ creation).<br>
       • Production schema is missing Go entity fields: <code>channel</code>, <code>snapshot_*</code>, <code>portal_*</code>, <code>assigned_*</code>, <code>cached_status</code>, <code>product_sku_id</code>, <code>declination_*</code>, <code>price_indication_*</code>.<br>
-      • <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> (CLS migration 028) DO NOT EXIST in production.<br>
+      • <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> (CLS migration 028) DO NOT EXIST in production and will be dropped — <strong>canonical tables are <code>insurance.request_for_quote</code> and <code>insurance.request_for_quote_line_item</code></strong>.<br>
       • <code>insurance.order_ext</code>, <code>insurance.v_policy_line_item_full</code> (CLS migration 079) DO NOT EXIST — MegaBro sync errors on every poll.<br>
-      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, the table lineage must be resolved, missing columns added, and a live RFQ creation pipeline must be running.<br><br>
+      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, CLS Go code must be updated to write to the canonical insurance.request_for_quote tables, missing columns added, and a live RFQ creation pipeline must be running.<br><br>
       <strong>Backfill origin:</strong> All 25,441 RFQs were created by MegaBro backfill scripts (NOT CLS migrations) — commit <code>92bc4ccb</code> by Finn, 2026-03-17.<br>
-      <strong>Two separate table lineages coexist in production:</strong><br>
-      &nbsp;&nbsp;• MegaBro scripts: <code>cpq.request_for_quote</code> (10 cols) + <code>insurance.request_for_quote</code> (16 cols, has underwriter/carrier names)<br>
-      &nbsp;&nbsp;• CLS migration 028 planned: <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> — NEITHER EXISTS IN PROD<br>
-      <strong>Go entity struct mismatch:</strong> CLS <code>internal/domain/rfq/entity.go</code> models a schema that was never applied. Full disparity table in Work Items tab Schema Audit section.<br>
+      <strong>Canonical table lineage (MegaBro names are correct):</strong><br>
+      &nbsp;&nbsp;• Canonical: <code>cpq.request_for_quote</code> (10 cols) + <code>insurance.request_for_quote</code> (16 cols, has underwriter/carrier names)<br>
+      &nbsp;&nbsp;• Legacy CLS migration 028 names (being dropped): <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> — NEITHER EXISTS IN PROD, NEITHER WILL BE CREATED<br>
+      <strong>Go entity struct mismatch:</strong> CLS <code>internal/domain/rfq/entity.go</code> and <code>quote_repo.go</code> model the legacy <code>insurance.rfq</code> schema — must be updated to target <code>insurance.request_for_quote</code>. Full disparity table in Work Items tab Schema Audit section.<br>
       <strong>Backfill source:</strong> <code>public.submissions</code> + <code>submission_underwriter_join</code> — legacy BigBrother tables.
     </div>
   </div>
@@ -7410,17 +7410,17 @@ const ENG_TODOS = [
   {
     phase: 0, seq: 2,
     title: 'Consolidate RFQ tables: remove CPQ two-tier',
-    desc: 'Drop cpq.request_for_quote and cpq.request_for_quote_line_item. Use insurance.rfq and insurance.rfq_line_item_v2 as the single source. Reconcile MegaBro backfill ghost tables (insurance.request_for_quote, insurance.request_for_quote_line_item — different names from the CLS migration tables).',
+    desc: 'Drop cpq.request_for_quote, cpq.request_for_quote_line_item, insurance.rfq, and insurance.rfq_line_item_v2. Use insurance.request_for_quote and insurance.request_for_quote_line_item as the single canonical tables. CLS Go code (quote_repo.go) needs to be updated to write to these tables instead of the legacy insurance.rfq names from migration 028.',
     services: ['CLS', 'MegaBro'],
     ticket: 'ENG-1795',
     priority: 'High',
     status: 'Not Started',
-    notes: 'CONFIRMED 2026-03-25: insurance.rfq and insurance.rfq_line_item_v2 DO NOT EXIST in production. The backfill created insurance.request_for_quote and insurance.request_for_quote_line_item instead (25,441 and 33,150 rows). CLS migration 028 was never applied. Full audit in Schema Audit section of Work Items tab.',
+    notes: 'CONFIRMED 2026-03-25: insurance.rfq and insurance.rfq_line_item_v2 (CLS migration 028) DO NOT EXIST in production and will be dropped — they are the legacy names. The canonical tables are insurance.request_for_quote (25,441 rows) and insurance.request_for_quote_line_item (33,150 rows), created by MegaBro backfill 92bc4ccb. CLS migration 028 was never applied and will not be. Full audit in Schema Audit section of Work Items tab.',
   },
   {
     phase: 0, seq: 3,
     title: 'Apply missing RFQ columns migration',
-    desc: 'Add channel, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url, assigned_to, assigned_type, assigned_at, cached_status, product_sku_id to the consolidated RFQ table. All of these exist in the Go entity struct but no applied migration covers them.',
+    desc: 'Add channel, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url, assigned_to, assigned_type, assigned_at, cached_status, product_sku_id to insurance.request_for_quote. Add declination_reason, declination_category, price_indication_premium, price_indication_limits to insurance.request_for_quote_line_item. All of these exist in the Go entity struct but no applied migration covers them.',
     services: ['CLS'],
     ticket: null,
     priority: 'High',
@@ -7585,12 +7585,12 @@ const ENG_TODOS = [
   {
     phase: 2, seq: 14,
     title: 'MegaBro RFQ creation path verification',
-    desc: 'Verify MegaBro\'s direct CLS call path works with the consolidated schema (Phase 0). MegaBro currently writes to a different table lineage (insurance.request_for_quote) than CLS migrations (insurance.rfq).',
+    desc: 'Verify MegaBro\'s direct CLS call path works with the canonical schema (Phase 0). MegaBro already writes to insurance.request_for_quote (the canonical table). CLS Go code (quote_repo.go) must be updated to write to these same tables, replacing the legacy insurance.rfq references from migration 028.',
     services: ['MegaBro', 'CLS'],
     ticket: null,
     priority: 'Med',
     status: 'Not Started',
-    notes: 'Table lineage mismatch is the core risk. After Phase 0 consolidation, confirm MegaBro writes to the canonical table.',
+    notes: 'The canonical tables are insurance.request_for_quote and insurance.request_for_quote_line_item (MegaBro names). CLS quote_repo.go currently targets the legacy insurance.rfq schema from migration 028. After Phase 0, confirm CLS and MegaBro both write to the same canonical tables.',
   },
 
   // ── Phase 3 ────────────────────────────────────────────────────────────────
