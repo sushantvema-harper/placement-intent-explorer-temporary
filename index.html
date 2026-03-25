@@ -1,0 +1,3247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlacementIntent State Machine Explorer</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232733;
+    --border: #2d3348;
+    --text: #e1e4ed;
+    --text-dim: #8b90a5;
+    --accent: #6c8cff;
+    --accent-dim: #3d5199;
+    --green: #4ade80;
+    --green-dim: #166534;
+    --red: #f87171;
+    --red-dim: #7f1d1d;
+    --yellow: #fbbf24;
+    --yellow-dim: #713f12;
+    --purple: #a78bfa;
+    --purple-dim: #4c1d95;
+    --orange: #fb923c;
+    --cyan: #22d3ee;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  header .subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .panel { display: none; padding: 32px; }
+  .panel.active { display: block; }
+
+  /* ─── Entity Hierarchy ─── */
+  .hierarchy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 900px;
+  }
+
+  .entity-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+  }
+
+  .entity-indent { width: 32px; flex-shrink: 0; }
+
+  .entity-box {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: all 0.15s;
+    flex: 1;
+    max-width: 600px;
+  }
+
+  .entity-box:hover { border-color: var(--accent); background: var(--surface2); }
+  .entity-box.selected { border-color: var(--accent); box-shadow: 0 0 12px rgba(108,140,255,0.15); }
+
+  .entity-name { font-size: 14px; font-weight: 600; }
+  .entity-cardinality { font-size: 11px; color: var(--text-dim); margin-left: 8px; }
+  .entity-desc { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  .entity-connector {
+    color: var(--text-dim);
+    font-size: 12px;
+    width: 24px;
+    text-align: center;
+  }
+
+  /* ─── Old vs New Model ─── */
+  .model-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    max-width: 1100px;
+  }
+
+  .model-col h3 {
+    font-size: 14px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .model-col.old h3 { color: var(--red); }
+  .model-col.new h3 { color: var(--green); }
+
+  .model-step {
+    padding: 10px 14px;
+    margin: 6px 0;
+    border-radius: 6px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    position: relative;
+  }
+
+  .model-step .label { font-weight: 600; }
+  .model-step .detail { color: var(--text-dim); margin-top: 4px; font-size: 11px; }
+  .model-step.marketing { border-left: 3px solid var(--cyan); }
+  .model-step.placement { border-left: 3px solid var(--purple); }
+  .model-step.terminal { border-left: 3px solid var(--red); opacity: 0.7; }
+
+  .arrow-down {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 2px 0;
+  }
+
+  .split-label {
+    text-align: center;
+    padding: 8px;
+    margin: 12px 0;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-radius: 4px;
+  }
+
+  .split-label.marketing-label { color: var(--cyan); background: rgba(34,211,238,0.08); }
+  .split-label.placement-label { color: var(--purple); background: rgba(167,139,250,0.08); }
+
+  /* ─── State Machine Viz ─── */
+  .sm-container {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+  }
+
+  .sm-graph {
+    flex: 1;
+    min-width: 500px;
+  }
+
+  .sm-sidebar {
+    width: 340px;
+    flex-shrink: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  svg.state-diagram {
+    width: 100%;
+    height: auto;
+  }
+
+  .state-node {
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .state-node rect, .state-node ellipse {
+    transition: all 0.15s;
+  }
+
+  .state-node:hover rect, .state-node:hover ellipse {
+    filter: brightness(1.3);
+  }
+
+  .state-node.active rect, .state-node.active ellipse {
+    stroke-width: 3;
+    filter: drop-shadow(0 0 8px rgba(108,140,255,0.4));
+  }
+
+  .transition-arrow {
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+  }
+
+  .transition-arrow:hover { opacity: 1; }
+  .transition-arrow.highlighted { opacity: 1; }
+
+  /* ─── Info Panels ─── */
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .info-card h4 {
+    font-size: 13px;
+    margin-bottom: 8px;
+    color: var(--accent);
+  }
+
+  .info-card .field {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(45,51,72,0.5);
+  }
+
+  .info-card .field:last-child { border-bottom: none; }
+  .info-card .field .key { color: var(--text-dim); }
+  .info-card .field .val { font-weight: 600; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge.initial { background: var(--accent-dim); color: var(--accent); }
+  .badge.active { background: var(--green-dim); color: var(--green); }
+  .badge.parked { background: var(--yellow-dim); color: var(--yellow); }
+  .badge.terminal { background: var(--red-dim); color: var(--red); }
+  .badge.terminal-win { background: var(--green-dim); color: var(--green); }
+
+  /* ─── Scenario Player ─── */
+  .scenario-list {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .scenario-btn {
+    padding: 8px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+
+  .scenario-btn:hover { border-color: var(--accent); }
+  .scenario-btn.active { background: var(--accent-dim); border-color: var(--accent); }
+
+  .timeline {
+    max-width: 700px;
+  }
+
+  .timeline-step {
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+    border-left: 2px solid var(--border);
+    margin-left: 20px;
+    padding-left: 20px;
+    position: relative;
+    opacity: 0.3;
+    transition: opacity 0.3s;
+  }
+
+  .timeline-step.visible { opacity: 1; }
+  .timeline-step.current { opacity: 1; }
+
+  .timeline-step::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 16px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+
+  .timeline-step.current::before { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .timeline-step.visible::before { background: var(--green); }
+
+  .timeline-day {
+    font-size: 12px;
+    color: var(--text-dim);
+    width: 50px;
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+
+  .timeline-content { flex: 1; }
+  .timeline-event { font-size: 13px; font-weight: 600; }
+  .timeline-detail { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .timeline-state { font-size: 11px; margin-top: 4px; }
+
+  .player-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .player-btn {
+    padding: 8px 20px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+
+  .player-btn:hover { background: var(--accent); color: white; }
+  .player-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ─── Materialization ─── */
+  .mat-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 800px;
+  }
+
+  .mat-level {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .mat-label {
+    width: 160px;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .mat-boxes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .mat-box {
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: all 0.3s;
+  }
+
+  .mat-box.highlight { border-color: var(--accent); background: var(--surface2); }
+
+  .mat-arrow {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 18px;
+    margin-left: 160px;
+    padding-left: 12px;
+  }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 900px) {
+    .model-comparison { grid-template-columns: 1fr; }
+    .sm-container { flex-direction: column; }
+    .sm-sidebar { width: 100%; }
+  }
+
+  /* ─── Transition Rules Table ─── */
+  .rules-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    max-width: 800px;
+  }
+
+  .rules-table th, .rules-table td {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    text-align: left;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .rules-table th {
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  .rules-table tr:hover { background: var(--surface); }
+
+  /* ─── All Machines Panel ─── */
+  .machines-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  .machine-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .machine-card:hover { border-color: var(--accent); }
+  .machine-card h4 { font-size: 14px; color: var(--accent); margin-bottom: 8px; }
+  .machine-card .states { font-size: 11px; color: var(--text-dim); line-height: 1.8; }
+  .machine-card .state-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    margin: 2px;
+    border-radius: 3px;
+    font-size: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+  .machine-card .state-tag.is-initial { border-color: var(--accent); color: var(--accent); }
+  .machine-card .state-tag.is-terminal { border-color: var(--red); color: var(--red); }
+
+  /* ─── Entity Status Detail ─── */
+  .status-section {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .status-field-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    margin-top: 14px;
+  }
+
+  .status-field-header:first-child { margin-top: 0; }
+
+  .status-field-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .status-kind-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-kind-badge.leaf { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+  .status-kind-badge.derived { background: rgba(108,140,255,0.12); color: var(--accent); border: 1px solid rgba(108,140,255,0.3); }
+  .status-kind-badge.materialized { background: rgba(167,139,250,0.12); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+
+  .status-note {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    font-style: italic;
+  }
+
+  .status-derived-from {
+    font-size: 11px;
+    color: var(--cyan);
+    margin-bottom: 6px;
+  }
+
+  .status-val-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(45,51,72,0.4);
+    font-size: 12px;
+  }
+
+  .status-val-row:last-child { border-bottom: none; }
+
+  .status-val-name {
+    font-weight: 600;
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+
+  .status-val-note {
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .status-legend {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .status-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .status-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PlacementIntent Explorer</h1>
+  <span class="subtitle">Interactive state machine visualization for Harper's submissions lifecycle</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-panel="overview">Old → New Model</div>
+  <div class="tab" data-panel="hierarchy">Entity Hierarchy</div>
+  <div class="tab" data-panel="placement">PlacementIntent Machine</div>
+  <div class="tab" data-panel="scenarios">Scenario Player</div>
+  <div class="tab" data-panel="materialization">Status Materialization</div>
+  <div class="tab" data-panel="all-machines">All Machines</div>
+  <div class="tab" data-panel="email-classifications">Email Classifications</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 1: Old vs New Model                  -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel active" id="panel-overview">
+  <h2 style="font-size:16px; margin-bottom:8px;">Data Model Evolution: BigBrother → CLS</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    The old model tracked statuses at the <strong>account level</strong> (flat, denormalized).
+    The new model splits the lifecycle into <strong>marketing states</strong> (intake → dispatch) and <strong>placement states</strong> (dispatch → quote/bind), tracked per coverage via intent machines.
+  </p>
+
+  <div class="model-comparison">
+    <!-- Old Model -->
+    <div class="model-col old">
+      <h3>BigBrother (Old — Account Level)</h3>
+      <div class="model-step">
+        <div class="label">Intake Completed</div>
+        <div class="detail">Awaiting submission packet</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step">
+        <div class="label">Pending Application & Submissions</div>
+        <div class="detail">Equivalent to preparing → packet_ready</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step">
+        <div class="label">Co-Pilot</div>
+        <div class="detail">Carrier recommendations, routing</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step">
+        <div class="label">Awaiting Dispatch</div>
+        <div class="detail">Packet ready, awaiting submission to market</div>
+      </div>
+      <div class="arrow-down" style="font-size:18px; color:var(--yellow);">━━━ ✂ ━━━</div>
+      <div class="model-step">
+        <div class="label">Awaiting UW Communication</div>
+        <div class="detail">Old Jade system fits here</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step">
+        <div class="label">Quote Received</div>
+        <div class="detail">Pseudo-status, no formal tracking</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step terminal">
+        <div class="label">Terminal States</div>
+        <div class="detail">Bound / Declined / Lost (flat)</div>
+      </div>
+    </div>
+
+    <!-- New Model -->
+    <div class="model-col new">
+      <h3>CLS (New — Per-Coverage Intent)</h3>
+
+      <div class="split-label marketing-label">Marketing States (OLI / SubmissionIntent)</div>
+
+      <div class="model-step marketing">
+        <div class="label">CoverageIntent: intake</div>
+        <div class="detail">IntakeWorkflow: collecting → reviewing → ready</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step marketing">
+        <div class="label">CoverageIntent: submission</div>
+        <div class="detail">SubmissionIntent: preparing → packet_ready → submitted</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step marketing">
+        <div class="label">SubmissionIntent: submitted</div>
+        <div class="detail">Agora dispatches packet → RFQs created → PI created</div>
+      </div>
+
+      <div class="arrow-down" style="font-size:18px; color:var(--yellow);">━━━ ✂ ━━━</div>
+      <div class="split-label placement-label">Placement States (RFQLI / PlacementIntent)</div>
+
+      <div class="model-step placement">
+        <div class="label">CoverageIntent: placement</div>
+        <div class="detail">PlacementIntent: waiting_for_uw (per RFQLI)</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step placement">
+        <div class="label">PlacementIntent: quoted</div>
+        <div class="detail">Jade/Harper-claw signals → MiniOrc transitions PI</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step placement">
+        <div class="label">PlacementIntent: proposal_sent</div>
+        <div class="detail">Quote validated, sent to customer</div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="model-step terminal">
+        <div class="label">Terminal: bound | declined_all | remarketing</div>
+        <div class="detail">Process Manager auto-advances CoverageIntent phase</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 2: Entity Hierarchy                  -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-hierarchy">
+  <h2 style="font-size:16px; margin-bottom:8px;">Entity Hierarchy & Cardinality</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Click any entity to see its fields and state machine. Status propagates <strong>bottom-up</strong>:
+    PI → RFQLI (derived) → RFQ (materialized) → Opportunity (aggregated).
+  </p>
+
+  <div class="status-legend">
+    <div class="status-legend-item"><div class="status-legend-dot" style="background:var(--green);"></div> leaf (directly set)</div>
+    <div class="status-legend-item"><div class="status-legend-dot" style="background:var(--accent);"></div> derived (computed)</div>
+    <div class="status-legend-item"><div class="status-legend-dot" style="background:var(--purple);"></div> materialized (aggregated from children)</div>
+  </div>
+
+  <div style="display:flex; gap:32px; align-items:flex-start;">
+    <div class="hierarchy" id="hierarchy-tree">
+      <!-- Built by JS -->
+    </div>
+    <div id="hierarchy-detail" class="info-card" style="width:500px; display:none; max-height:85vh; overflow-y:auto;">
+      <!-- Filled by JS on click -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 3: PlacementIntent State Machine     -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-placement">
+  <h2 style="font-size:16px; margin-bottom:8px;">PlacementIntent State Machine</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Click a state to see valid transitions. This machine tracks the lifecycle between "submitted" and "got an answer."
+  </p>
+
+  <div class="sm-container">
+    <div class="sm-graph">
+      <svg class="state-diagram" id="pi-svg" viewBox="0 0 700 520"></svg>
+    </div>
+    <div class="sm-sidebar">
+      <div class="info-card" id="pi-state-info">
+        <h4>Select a state</h4>
+        <p style="font-size:12px; color:var(--text-dim);">Click any state node to see details and valid transitions.</p>
+      </div>
+      <div class="info-card" style="overflow:hidden;">
+        <h4>Transition Rules</h4>
+        <div style="overflow-x:auto; max-width:100%;">
+          <table class="rules-table" id="pi-rules-table" style="max-width:100%; table-layout:fixed; word-wrap:break-word;">
+            <thead>
+              <tr><th style="width:25%;">From</th><th style="width:20%;">To</th><th style="width:55%;">Trigger</th></tr>
+            </thead>
+            <tbody id="pi-rules-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 4: Scenario Player                   -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-scenarios">
+  <h2 style="font-size:16px; margin-bottom:8px;">Scenario Player</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Walk through concrete scenarios step by step — specific companies, coverages, carriers, and premiums.
+    Each step shows entity IDs, dollar amounts, and the exact state transitions.
+  </p>
+
+  <div class="scenario-list" id="scenario-buttons"></div>
+
+  <div style="display:flex; gap:32px; align-items:flex-start;">
+    <div style="flex:1;">
+      <div class="timeline" id="scenario-timeline"></div>
+      <div class="player-controls">
+        <button class="player-btn" id="btn-prev" disabled>← Prev</button>
+        <button class="player-btn" id="btn-next">Next →</button>
+        <button class="player-btn" id="btn-reset" style="margin-left:auto;">Reset</button>
+      </div>
+    </div>
+    <div style="width:280px; flex-shrink:0;">
+      <div class="info-card" id="scenario-state-card">
+        <h4>Entity States</h4>
+        <div id="scenario-state-body" style="font-size:12px; color:var(--text-dim);">
+          Select a scenario to begin.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 5: Status Materialization            -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-materialization">
+  <h2 style="font-size:16px; margin-bottom:8px;">Status Materialization Flow</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Click a PlacementIntent state to see how it propagates up through RFQLI → RFQ → CoverageIntent → Opportunity.
+  </p>
+
+  <div class="mat-flow" id="mat-flow">
+    <!-- Built by JS -->
+  </div>
+
+  <div style="margin-top:32px;">
+    <h3 style="font-size:14px; margin-bottom:12px;">Aggregation Rules (RFQ from RFQLIs)</h3>
+    <table class="rules-table" style="max-width:600px;">
+      <thead><tr><th>RFQLI States</th><th>→ RFQ Status</th></tr></thead>
+      <tbody>
+        <tr><td>All pending</td><td>submitted</td></tr>
+        <tr><td>Some past pending (brokered)</td><td>awaiting_quote</td></tr>
+        <tr><td>Any info_requested</td><td>triaging</td></tr>
+        <tr><td>All terminal</td><td>completed</td></tr>
+        <tr><td>All withdrawn</td><td>withdrawn</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 6: All Machines                      -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-all-machines">
+  <h2 style="font-size:16px; margin-bottom:8px;">All State Machines in CLS</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">
+    Complete reference of every state machine defined in the Customer Lifecycle Service. Click "show definitions" on any card to see operational definitions for each state.
+  </p>
+  <p style="font-size:11px; color:var(--yellow); margin-bottom:24px; font-style:italic;">
+    ⚠ Operational definitions are NOT official. States marked [from code] have documentation in the CLS codebase. States marked [interpreted] are inferred from transition physics and domain context. Treat as a working reference for discussion, not a spec.
+  </p>
+  <div class="machines-grid" id="machines-grid"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 7: Email Classifications             -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-email-classifications">
+  <h2 style="font-size:16px; margin-bottom:8px;">Email Classifications (Zephyrus / Hermes)</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
+    Every inbound/outbound email in Harper's system flows through the Zephyrus pipeline (Bronze → Silver),
+    gets classified by Hermes, and is routed to downstream services via Relay lifecycle messages.
+    Click any classification to see its definition, routing, and relationship to placement state transitions.
+  </p>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
+    Source: <code>zephyrus/dags/email/silver/</code> + <code>zephyrus/dags/utils/relay_routing.py</code> + <code>notification_service.py</code>
+  </p>
+
+  <div style="display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap;">
+    <!-- Classification cards -->
+    <div style="flex:1; min-width:400px;">
+      <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Classification Taxonomy</h3>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;">
+        <span class="badge active" style="font-size:10px;">Click a category below for details</span>
+        <span class="badge initial" style="font-size:10px;">Blue = triggers placement signals</span>
+        <span class="badge parked" style="font-size:10px;">Yellow = triggers notifications</span>
+        <span class="badge terminal" style="font-size:10px;">Red = excluded from notifications</span>
+      </div>
+      <div id="email-class-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;"></div>
+    </div>
+
+    <!-- Detail sidebar -->
+    <div style="width:380px; flex-shrink:0;">
+      <div class="info-card" id="email-class-detail" style="max-height:70vh; overflow-y:auto;">
+        <h4>Select a classification</h4>
+        <p style="font-size:12px; color:var(--text-dim);">Click any category card to see routing, downstream actions, and placement relevance.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline diagram -->
+  <div style="margin-top:32px;">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Email Processing Pipeline (Bronze → Silver)</h3>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;" id="pipeline-stages">
+    </div>
+  </div>
+
+  <!-- Routing table -->
+  <div style="margin-top:32px;">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Classification → Relay Lifecycle Routing</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+      Every classified email emits two Relay messages: a channel message (<code>comms.email</code>) and a lifecycle message routed by category.
+      These are defined in <code>STRONG_EMAIL_ROUTES</code> in <code>relay_routing.py</code>.
+    </p>
+    <table class="rules-table" style="max-width:700px;">
+      <thead><tr><th>Category</th><th>Lifecycle Message</th><th>Downstream Consumer</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--accent);">INSURANCE_QUOTE</td><td><code>comms.quote</code></td><td>Quote funnel — extraction, validation, PI transition</td></tr>
+        <tr><td style="color:var(--accent);">INSURANCE_DECLINE</td><td><code>comms.quote</code></td><td>Quote funnel — decline handling, PI transition</td></tr>
+        <tr><td style="color:var(--accent);">QUOTE_REJECTED</td><td><code>comms.quote</code></td><td>Quote funnel — rejection tracking</td></tr>
+        <tr><td style="color:var(--purple);">SUBMISSION_TO_QUOTE</td><td><code>comms.placement</code></td><td>Placement tracking — mid-funnel signals</td></tr>
+        <tr><td style="color:var(--purple);">SUBMISSION</td><td><code>comms.placement</code></td><td>Placement tracking — submission acknowledgment</td></tr>
+        <tr><td style="color:var(--green);">INSURANCE_BINDER</td><td><code>comms.service</code></td><td>Post-sale — binder received, binding flow</td></tr>
+        <tr><td style="color:var(--green);">DOCU_SIGN</td><td><code>comms.service</code></td><td>Post-sale — signature workflow</td></tr>
+        <tr><td style="color:var(--green);">INSURANCE_POLICY</td><td><code>comms.service</code></td><td>Post-sale — policy issuance</td></tr>
+        <tr><td style="color:var(--green);">SERVICE_REQUEST</td><td><code>comms.service</code></td><td>Post-sale — endorsements, changes</td></tr>
+        <tr><td style="color:var(--green);">POLICY_CANCELLATION</td><td><code>comms.service</code></td><td>Post-sale — cancellation handling</td></tr>
+        <tr><td style="color:var(--green);">POLICY_ENDORSEMENT</td><td><code>comms.service</code></td><td>Post-sale — endorsement processing</td></tr>
+        <tr><td style="color:var(--green);">POLICY_REINSTATEMENT</td><td><code>comms.service</code></td><td>Post-sale — reinstatement</td></tr>
+        <tr><td style="color:var(--orange);">NEW_CUSTOMER</td><td><code>comms.growth</code></td><td>Growth — new opportunity intake</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// DATA: All state machines from CLS
+// ═══════════════════════════════════════════════
+// ⚠️ OPERATIONAL DEFINITIONS DISCLAIMER:
+// These definitions are NOT official. Many are interpreted from transition
+// physics, code comments, and domain context. States marked [from code] have
+// documentation in the CLS codebase. States marked [interpreted] are inferred
+// from the state machine structure and Harper's operational context.
+// Treat as a working reference, not a spec.
+
+const MACHINES = {
+  PlacementIntent: {
+    initial: 'waiting_for_uw',
+    terminals: ['bound', 'declined_all', 'resubmission', 'remarketing', 'cancelled'],
+    transitions: {
+      'waiting_for_uw': ['quoted', 'resubmission', 'remarketing', 'on_hold', 'cancelled'],
+      'quoted': ['proposal_sent', 'remarketing', 'on_hold', 'cancelled'],
+      'proposal_sent': ['bound', 'remarketing', 'on_hold', 'cancelled'],
+      'on_hold': ['waiting_for_uw', 'quoted', 'proposal_sent', 'cancelled']
+    },
+    stateTypes: {
+      'waiting_for_uw': 'initial',
+      'quoted': 'active',
+      'proposal_sent': 'active',
+      'on_hold': 'parked',
+      'bound': 'terminal-win',
+      'declined_all': 'terminal',
+      'resubmission': 'terminal',
+      'remarketing': 'terminal',
+      'cancelled': 'terminal'
+    },
+    outcomes: {
+      'bound': 'won', 'declined_all': 'lost', 'resubmission': 'resubmission',
+      'remarketing': 'remarketing', 'cancelled': 'cancelled'
+    },
+    description: 'Tracks the gap between "we sent it" and "we got an answer." v0.0 — supports manual operator transitions + future automated signals.',
+    stateDefinitions: {
+      'waiting_for_uw': {
+        def: 'Submission has been dispatched to this carrier. The ball is in the underwriter\'s court — we are waiting for them to acknowledge, request info, or respond with a quote/decline.',
+        who: 'Enters automatically when PI is created after dispatch. Exits via operator action or future signal consumer.',
+        blocker: 'Can have sub-blocker context: "customer" (UW asked us for docs) vs "uw" (ball in carrier\'s court). Not modeled in PI status itself — tracked externally.',
+        src: 'interpreted'
+      },
+      'quoted': {
+        def: 'A formal quote has been received from this carrier for this coverage line. The quote exists as a separate Quote entity linked via RFQLI. Premium, limits, and terms are now known.',
+        who: 'Operator manually transitions (or future: signal consumer reacts to quote_received event). Quote entity must exist before this transition.',
+        src: 'interpreted'
+      },
+      'proposal_sent': {
+        def: 'The quote has been validated (extraction correct, terms acceptable) and a proposal has been sent to the customer/insured for review. This is the "quote is in front of the customer" state.',
+        who: 'Operator transitions after reviewing quote and sending proposal. May involve quote validation tooling (Aryan/Atmody\'s infra).',
+        note: 'Finn mentioned this "probably shouldn\'t be on [PI]" — may be removed in favor of SalesIntent owning post-quote states. Keeping for now as v0.0.',
+        src: 'interpreted'
+      },
+      'on_hold': {
+        def: 'Placement is paused. No follow-up communications should be sent to this carrier. Could be customer-initiated ("we\'re restructuring") or operator-initiated ("waiting for internal decision").',
+        who: 'Operator clicks Pause on MegaBro. Can resume to any active state.',
+        note: 'Any automated communication system should check for on_hold and suppress outreach while in this state.',
+        src: 'interpreted'
+      },
+      'bound': {
+        def: 'Customer accepted this quote and coverage has been bound with the carrier. This is the successful terminal state — the placement worked. Process Manager auto-advances CoverageIntent to sales/binding phase.',
+        who: 'Operator transitions after customer acceptance. Triggers BindingIntent creation via Process Manager.',
+        outcome: 'won',
+        src: 'from code — ComputeOutcome returns "won"'
+      },
+      'declined_all': {
+        def: 'The underwriter declined to quote this coverage line. Reasons are tracked on the RFQLI (declination_category). If ALL PIs for an OLI reach declined_all, the operator sees "All Declined — Eligible for Remarketing."',
+        who: 'Operator manually transitions (or future: signal consumer reacts to quote_declined event).',
+        outcome: 'lost',
+        note: 'Does NOT automatically trigger remarketing — operator must evaluate decline reasons and decide.',
+        src: 'from code — ComputeOutcome returns "lost"'
+      },
+      'resubmission': {
+        def: 'The submission needs to be re-done — not because the carrier declined, but because something was wrong with the packet itself (wrong docs, wrong entity, missing forms). Process Manager backtracks CoverageIntent from placement → submission phase.',
+        who: 'Operator determines packet was defective and triggers resubmission.',
+        outcome: 'resubmission',
+        note: 'Creates a new SubmissionIntent with type=remarketing and prior_si reference. Different from remarketing (which means "try different carriers").',
+        src: 'from code — ComputeOutcome returns "resubmission"'
+      },
+      'remarketing': {
+        def: 'The current carrier/market didn\'t work out and we need to try different carriers or markets (e.g., switch from admitted to E&S). Process Manager backtracks CoverageIntent from placement → submission phase.',
+        who: 'Operator decides after decline or unacceptable quote. Triggers new submission cycle targeting different carriers.',
+        outcome: 'remarketing',
+        note: 'Different from resubmission: remarketing = "different carriers", resubmission = "same carrier, fix the packet."',
+        src: 'from code — ComputeOutcome returns "remarketing"'
+      },
+      'cancelled': {
+        def: 'This placement has been abandoned. Customer withdrew, opportunity was lost, or operator killed it. No further action will be taken on this PI.',
+        who: 'Operator or system cancellation. Can be reached from any non-terminal state.',
+        outcome: 'cancelled',
+        src: 'from code — ComputeOutcome returns "cancelled"'
+      },
+    }
+  },
+  RFQLineItem: {
+    initial: 'pending',
+    terminals: ['declined', 'quoted', 'withdrawn'],
+    transitions: {
+      'pending': ['under_review', 'declined', 'withdrawn'],
+      'submitted': ['under_review', 'declined', 'withdrawn'],
+      'under_review': ['info_requested', 'declined', 'price_indication', 'quoted'],
+      'info_requested': ['under_review', 'declined', 'withdrawn'],
+      'price_indication': ['quoted', 'declined']
+    },
+    stateTypes: {
+      'pending': 'initial', 'submitted': 'initial', 'under_review': 'active',
+      'info_requested': 'parked', 'price_indication': 'active',
+      'declined': 'terminal', 'quoted': 'terminal-win', 'withdrawn': 'terminal'
+    },
+    description: 'Per-coverage outcome within an RFQ. When a line item reaches "quoted", a Quote entity is created. When ALL line items for an OLI reach "declined", MiniOrc decides whether to remarket.',
+    stateDefinitions: {
+      'pending': {
+        def: 'RFQLI has been created but the carrier has not yet acknowledged receipt. The RFQ has been submitted/dispatched but we have no signal from the UW.',
+        src: 'from code — initial state'
+      },
+      'submitted': {
+        def: 'Legacy alias for pending — used when RFQLI was created via the older submission flow. Functionally identical to pending.',
+        src: 'from code — alternate initial state with same transitions as pending'
+      },
+      'under_review': {
+        def: 'The carrier has acknowledged receipt and is actively reviewing the submission. We know the UW is looking at it — the ball is in their court.',
+        src: 'interpreted — entered from pending/submitted, exits to info_requested/price_indication/quoted/declined'
+      },
+      'info_requested': {
+        def: 'The UW needs additional information before they can quote. Could be loss runs, MVRs, supplemental applications, financial statements, etc. This creates a blocker that requires customer or broker action.',
+        who: 'Operator or future signal consumer. Exits when docs are provided and UW resumes review (→ under_review).',
+        src: 'from code — machine comment mentions this state; can also → withdrawn if we give up'
+      },
+      'price_indication': {
+        def: 'The carrier has provided an informal price range or indication, but not a formal bindable quote. This is a "we\'re interested, here\'s roughly what it would cost" signal. Common with brokered submissions.',
+        note: 'Can only move forward to quoted (formal quote) or declined (carrier pulls back). Cannot return to under_review.',
+        src: 'interpreted — sits between under_review and quoted in the flow'
+      },
+      'quoted': {
+        def: 'A formal, bindable quote has been received from the carrier for this coverage line. A Quote entity has been created by Aether/extraction pipeline with premium, limits, and terms.',
+        outcome: 'Terminal — this RFQLI is done. Next action is on the Quote entity (validation → selection).',
+        src: 'from code — terminal state, triggers Quote entity creation'
+      },
+      'declined': {
+        def: 'The carrier has declined to quote this coverage. A declination_category is recorded (appetite, class_of_business, loss_history, premium_size, state_restriction, information_missing, or other).',
+        outcome: 'Terminal — no quote will come from this carrier for this coverage.',
+        src: 'from code — terminal state with declination_category enum'
+      },
+      'withdrawn': {
+        def: 'WE withdrew the request — the carrier didn\'t decline, we pulled it back. Could be because we\'re remarketing elsewhere, the customer cancelled, or we submitted to the wrong carrier.',
+        outcome: 'Terminal — we chose to stop pursuing this line with this carrier.',
+        src: 'interpreted — only we trigger this, not the carrier'
+      },
+    }
+  },
+  SubmissionIntent: {
+    initial: 'preparing',
+    terminals: ['submitted', 'cancelled'],
+    transitions: {
+      'preparing': ['packet_ready', 'needs_info', 'on_hold', 'cancelled'],
+      'needs_info': ['preparing', 'on_hold', 'cancelled'],
+      'packet_ready': ['submitted', 'preparing', 'on_hold', 'cancelled'],
+      'on_hold': ['preparing', 'needs_info', 'packet_ready', 'cancelled'],
+      'submitted': ['packet_ready']
+    },
+    stateTypes: {
+      'preparing': 'initial', 'needs_info': 'parked', 'packet_ready': 'active',
+      'on_hold': 'parked', 'submitted': 'terminal-win', 'cancelled': 'terminal'
+    },
+    description: 'Tracks packet building from preparing through submission. 1:1 with OLI. Outcome: submitted or cancelled.',
+    stateDefinitions: {
+      'preparing': {
+        def: 'Agora is actively building the submission packet — generating ACORD forms, collecting documents, running carrier recommendations, and composing the email. The PacketGenerationWorkflow (11-step Temporal saga) drives this.',
+        who: 'Agora workflows set this. Exits when packet is complete (→ packet_ready) or info is missing (→ needs_info).',
+        src: 'from code — initial state, ComputeOutcome returns "" (in-flight)'
+      },
+      'needs_info': {
+        def: 'Packet cannot be completed because required information is missing — application data, documents, loss runs, etc. Blocks the submission pipeline until the gap is filled.',
+        who: 'Agora workflow detects missing data, or operator flags. Backtracks CoverageIntent to intake phase.',
+        note: 'Process Manager reacts: CI placement → intake (backtrack) when SI enters needs_info.',
+        src: 'interpreted — only state that triggers CI backtrack to intake'
+      },
+      'packet_ready': {
+        def: 'All documents collected, ACORD forms generated, email composed, carrier recommendations computed. The packet is ready for an operator to review and dispatch (or auto-dispatch).',
+        who: 'Agora PacketGenerationWorkflow completes successfully. SubmissionPacket.status = "ready".',
+        note: 'Can go back to preparing if operator finds issues. Forward to submitted triggers dispatch.',
+        src: 'interpreted — gated by Agora\'s packet_ready check'
+      },
+      'on_hold': {
+        def: 'Submission is paused. Similar to PI on_hold — customer restructuring, internal decision pending, or waiting for a dependency.',
+        who: 'Operator action via MegaBro.',
+        src: 'interpreted — parking state, can resume to any non-terminal state'
+      },
+      'submitted': {
+        def: 'The packet has been dispatched to the market — emails sent to underwriters, portal submissions made, API calls fired. This is the terminal success state for SubmissionIntent. RFQs and PlacementIntents are created at this point.',
+        who: 'Agora VegapunkEmailWorkflow or portal/API dispatch completes. Process Manager auto-advances CI to placement phase.',
+        note: 'Can reopen to packet_ready (submitted → packet_ready) for rare cases like remarketing or packet correction.',
+        src: 'from code — ComputeOutcome returns "submitted"'
+      },
+      'cancelled': {
+        def: 'Submission was cancelled before dispatch. Opportunity lost, customer withdrew, or coverage no longer needed.',
+        who: 'Operator or system cancellation.',
+        src: 'from code — ComputeOutcome returns "cancelled"'
+      },
+    }
+  },
+  CoverageIntent: {
+    initial: 'intake',
+    terminals: ['service', 'abandoned', 'disqualified', 'cancelled'],
+    transitions: {
+      'intake': ['submission', 'abandoned', 'disqualified'],
+      'submission': ['intake', 'placement', 'cancelled'],
+      'placement': ['submission', 'sales', 'cancelled'],
+      'sales': ['binding', 'cancelled'],
+      'binding': ['service', 'sales', 'cancelled']
+    },
+    stateTypes: {
+      'intake': 'initial', 'submission': 'active', 'placement': 'active',
+      'sales': 'active', 'binding': 'active', 'service': 'terminal-win',
+      'abandoned': 'terminal', 'disqualified': 'terminal', 'cancelled': 'terminal'
+    },
+    description: 'Phase-level lifecycle coordinator. Thin wrapper — child intents own micro-states. Auto-advanced by IntentLifecycleProcess (Process Manager).',
+    stateDefinitions: {
+      'intake': {
+        def: 'Data collection phase. Owned by Dumbly intake pipeline. Micro-states live in IntakeWorkflow (collecting → reviewing → remediation → ready). Application info, documents, and supplementals are being gathered.',
+        who: 'Process Manager creates IntakeWorkflow when CI enters intake. Auto-advances to submission when IntakeWorkflow reaches "ready".',
+        src: 'from code — "data collection, owned by Dumbly (micro-states in IntakeWorkflow)"'
+      },
+      'submission': {
+        def: 'Packet building and market submission phase. Micro-states live in SubmissionIntent (preparing → packet_ready → submitted). Agora builds ACORD forms, generates emails, and dispatches to carriers.',
+        who: 'Process Manager creates SubmissionIntent. Auto-advances to placement when SI reaches "submitted".',
+        note: 'Can backtrack to intake if SI enters needs_info. Can be re-entered from placement (remarketing/resubmission).',
+        src: 'from code — "packet building and submitting to market (SI: preparing → submitted)"'
+      },
+      'placement': {
+        def: 'UW follow-up, quoting, and proposal phase. Micro-states live in PlacementIntent (waiting_for_uw → quoted → proposal_sent). The submission has been dispatched and we\'re waiting for carrier responses.',
+        who: 'Process Manager creates PlacementIntent. Auto-advances to sales when PI reaches "bound".',
+        note: 'Can backtrack to submission if PI reaches resubmission or remarketing.',
+        src: 'from code — "UW follow-ups, quoting, and proposal (SI: waiting_for_uw → proposal_sent)"'
+      },
+      'sales': {
+        def: 'Post-quote phase. The customer has a proposal and is in the negotiation/decision process. Micro-states live in Order/OrderProduct (new_quote → quote_sent → reviewing → awaiting_payment).',
+        who: 'Process Manager advances here after PI → bound. Order entity tracks sales engagement.',
+        src: 'from code — "binding and closing (micro-states in Order)"'
+      },
+      'binding': {
+        def: 'Closing and binding phase. Customer accepted, payment collected, now executing the bind with the carrier. Micro-states live in BindingIntent (collecting_subjectivities → awaiting_binder → bound).',
+        who: 'Process Manager creates BindingIntent. Auto-advances to service when BI reaches "bound" (outcome: won).',
+        src: 'interpreted — the last active phase before policy issuance'
+      },
+      'service': {
+        def: 'Policy is bound and active. Post-sale servicing, endorsements, renewals. This is the successful end state for the entire coverage lifecycle.',
+        who: 'Process Manager advances here when BI reaches "bound". Sets outcome = "won".',
+        src: 'from code — terminal, "post-sale, policy active (micro-states in Policy/Renewal)"'
+      },
+      'abandoned': {
+        def: 'Customer stopped responding during intake. Enough outreach attempts were made without response to consider this coverage line dead.',
+        who: 'Operator or automated rule (e.g., 30 days no contact).',
+        src: 'interpreted — only reachable from intake phase'
+      },
+      'disqualified': {
+        def: 'This coverage does not meet underwriting requirements at the intake level — e.g., business type excluded, jurisdiction not supported, risk too high for any carrier. Not the same as a carrier decline (which happens in placement).',
+        who: 'Operator or intake review determines ineligibility.',
+        src: 'interpreted — only reachable from intake phase, pre-submission'
+      },
+      'cancelled': {
+        def: 'Coverage intent was cancelled at any post-intake phase. Customer withdrew, opportunity closed, or operator determined this coverage line is no longer needed.',
+        who: 'Operator or system cancellation. Reachable from submission, placement, sales, or binding.',
+        src: 'interpreted — universal escape hatch from any active phase'
+      },
+    }
+  },
+  IntakeWorkflow: {
+    initial: 'collecting',
+    terminals: ['abandoned', 'disqualified'],
+    transitions: {
+      'collecting': ['reviewing', 'abandoned', 'disqualified'],
+      'reviewing': ['ready', 'remediation', 'abandoned', 'disqualified'],
+      'remediation': ['collecting', 'abandoned', 'disqualified'],
+      'ready': ['collecting']
+    },
+    stateTypes: {
+      'collecting': 'initial', 'reviewing': 'active', 'remediation': 'parked',
+      'ready': 'terminal-win', 'abandoned': 'terminal', 'disqualified': 'terminal'
+    },
+    description: 'Per-intent intake micro-states with SLA tracking. Normal path: collecting → reviewing → ready. Remediation loop: reviewing → remediation → collecting.',
+    stateDefinitions: {
+      'collecting': {
+        def: 'Information collection phase. Application data, documents, loss runs, and supplementals are being gathered from the customer via Dumbly intake pipeline.',
+        sla: '48 hours',
+        who: 'Initial state. Also re-entered from remediation (docs provided) or ready (submission found missing info, reopened).',
+        src: 'from code — SLA: 48h, "info collection phase"'
+      },
+      'reviewing': {
+        def: 'Quality review of collected data. Intake specialist checks completeness, accuracy, and underwriting eligibility. Can approve (→ ready), find gaps (→ remediation), or determine ineligible.',
+        sla: '24 hours',
+        who: 'Operator reviews. This is the human quality gate before handoff to submission.',
+        src: 'from code — SLA: 24h, "quality review phase"'
+      },
+      'remediation': {
+        def: 'Gaps identified during review — missing documents, incomplete application fields, clarification needed from customer. Loops back to collecting when remediation is addressed.',
+        sla: '48 hours',
+        who: 'Operator identifies gaps during reviewing. Customer/broker must provide missing info.',
+        note: 'This is the remediation loop: reviewing → remediation → collecting → reviewing. Can cycle multiple times.',
+        src: 'from code — SLA: 48h, "address gaps loop"'
+      },
+      'ready': {
+        def: 'All intake data is complete and reviewed. Ready for handoff to submission phase. Process Manager auto-advances CoverageIntent from intake → submission and creates a SubmissionIntent.',
+        who: 'Reviewer approves. Triggers CI phase advancement.',
+        note: 'Can reopen to collecting if submission discovers missing info (ready → collecting). Tracks reopened_count.',
+        src: 'from code — "ready for submission handoff", can reopen'
+      },
+      'abandoned': {
+        def: 'Customer stopped engaging during intake. Multiple outreach attempts failed. This coverage line is considered dead at the intake stage.',
+        who: 'Operator or automated rule.',
+        src: 'from code — terminal'
+      },
+      'disqualified': {
+        def: 'Coverage does not meet basic eligibility criteria discovered during intake review. Not submittable to any carrier.',
+        who: 'Reviewer determines ineligibility during review.',
+        src: 'from code — terminal'
+      },
+    }
+  },
+  BindingIntent: {
+    initial: 'collecting_subjectivities',
+    terminals: ['bound', 'cancelled', 'bind_failed', 'rework'],
+    transitions: {
+      'collecting_subjectivities': ['preparing_bind_packet', 'preparing_to_bind', 'on_hold', 'cancelled', 'rework'],
+      'preparing_bind_packet': ['awaiting_signatures', 'collecting_subjectivities', 'on_hold', 'cancelled'],
+      'awaiting_signatures': ['awaiting_binder', 'preparing_bind_packet', 'on_hold', 'cancelled'],
+      'preparing_to_bind': ['awaiting_binder', 'bind_failed', 'on_hold', 'cancelled'],
+      'awaiting_binder': ['bound', 'collecting_subjectivities', 'preparing_bind_packet', 'bind_failed', 'on_hold', 'cancelled'],
+      'on_hold': ['collecting_subjectivities', 'preparing_bind_packet', 'awaiting_signatures', 'preparing_to_bind', 'awaiting_binder', 'cancelled']
+    },
+    stateTypes: {
+      'collecting_subjectivities': 'initial', 'preparing_bind_packet': 'active',
+      'awaiting_signatures': 'active', 'preparing_to_bind': 'active',
+      'awaiting_binder': 'active', 'on_hold': 'parked',
+      'bound': 'terminal-win', 'cancelled': 'terminal', 'bind_failed': 'terminal', 'rework': 'terminal'
+    },
+    description: 'Closing and binding process. Two paths: full (subjectivities → packet → signatures → binder) or fast (subjectivities → prepare_to_bind → binder).',
+    stateDefinitions: {
+      'collecting_subjectivities': {
+        def: 'Gathering conditions precedent to binding — documents the carrier requires before they\'ll issue a binder. Could be loss control reports, signed applications, certificates, financial statements, etc.',
+        who: 'Operator works with customer to satisfy subjectivities listed in the quote.',
+        src: 'interpreted — initial state, the "pre-work" before binding'
+      },
+      'preparing_bind_packet': {
+        def: 'All subjectivities collected. Now assembling the formal bind order — the package of documents and instructions sent to the carrier to request binding.',
+        who: 'Operator or system assembles bind packet.',
+        note: 'Full binding path: subjectivities → packet → signatures → binder.',
+        src: 'interpreted — the DocuSign/document assembly step'
+      },
+      'awaiting_signatures': {
+        def: 'Bind packet is ready but needs signatures — customer and/or broker must sign before we can submit the bind request to the carrier. Usually via DocuSign.',
+        who: 'System sends DocuSign request. Waiting for all parties to sign.',
+        src: 'interpreted — the signature collection gate'
+      },
+      'preparing_to_bind': {
+        def: 'Fast path — skipping the full packet/signature flow. Used for instant quotes or simple binds where the carrier doesn\'t require a formal bind packet with signatures.',
+        who: 'Operator or system determines fast path is appropriate.',
+        note: 'Fast binding path: subjectivities → prepare_to_bind → binder (skips packet + signatures).',
+        src: 'interpreted — alternate path from collecting_subjectivities, bypasses packet/signatures'
+      },
+      'awaiting_binder': {
+        def: 'Bind request has been submitted to the carrier. We are waiting for the carrier to issue the binder — the official confirmation that coverage is in force.',
+        who: 'System submits bind request. Ball is in carrier\'s court.',
+        note: 'This is the final waiting state. Can succeed (→ bound), fail (→ bind_failed), or need more work (→ collecting_subjectivities/preparing_bind_packet).',
+        src: 'interpreted — the "carrier is processing our bind request" state'
+      },
+      'on_hold': {
+        def: 'Binding process is paused. Payment issues, customer uncertainty, internal review needed, or carrier delay.',
+        who: 'Operator pauses. Can resume to any active state in the binding flow.',
+        src: 'interpreted — parking state with wide fan-out on resume'
+      },
+      'bound': {
+        def: 'Coverage is officially bound! Carrier issued the binder. Policy is now in effect. Process Manager sets CoverageIntent outcome = "won" and advances to service phase.',
+        who: 'Carrier confirms bind. Operator transitions.',
+        outcome: 'won',
+        src: 'from code — ComputeOutcome returns "won"'
+      },
+      'cancelled': {
+        def: 'Binding was cancelled before completion. Customer changed their mind, couldn\'t satisfy subjectivities, or payment failed.',
+        who: 'Operator or system cancellation.',
+        outcome: 'cancelled',
+        src: 'from code — ComputeOutcome returns "cancelled"'
+      },
+      'bind_failed': {
+        def: 'Carrier rejected the bind request. Could be because subjectivities weren\'t actually met, quote expired, or carrier withdrew the offer. Different from "cancelled" (which is us pulling out).',
+        who: 'Carrier rejects bind. Operator transitions.',
+        outcome: 'lost',
+        src: 'from code — ComputeOutcome returns "lost"'
+      },
+      'rework': {
+        def: 'Something needs to go back to the sales/negotiation phase. Coverage terms need revision, price objection during binding, or customer wants different limits. Process Manager backtracks CI to sales.',
+        who: 'Operator determines rework is needed.',
+        outcome: 'rework',
+        src: 'from code — ComputeOutcome returns "rework", backtracks CI to sales'
+      },
+    }
+  },
+  Quote: {
+    initial: 'pending_validation',
+    terminals: ['invalid', 'selected', 'not_selected', 'cancelled'],
+    transitions: {
+      'pending_validation': ['pending_decision', 'invalid', 'cancelled'],
+      'pending_decision': ['selected', 'not_selected', 'cancelled']
+    },
+    stateTypes: {
+      'pending_validation': 'initial', 'pending_decision': 'active',
+      'invalid': 'terminal', 'selected': 'terminal-win', 'not_selected': 'terminal', 'cancelled': 'terminal'
+    },
+    description: 'Carrier quote validation and selection. Short machine — validate then decide. Quote types: price_indication, indication_verified, full_quote.',
+    stateDefinitions: {
+      'pending_validation': {
+        def: 'Quote has been received/extracted from carrier response but hasn\'t been validated yet. Extraction pipeline (Aether/Hermes) parsed the quote — now someone (or something) needs to verify the extracted data is correct: premium amounts, limits, deductibles, coverage terms.',
+        who: 'Created automatically when carrier quote is parsed. Aryan/Atmody\'s quote validation tooling handles this step.',
+        src: 'interpreted — initial state, extraction happened but correctness unconfirmed'
+      },
+      'pending_decision': {
+        def: 'Quote has been validated — the extracted data is correct. Now a human decision is needed: do we want to present this quote to the customer? Is this the best option among competing quotes? Operator or sales team decides.',
+        who: 'Validation passes (human or automated). Now waiting for operator/sales decision.',
+        src: 'interpreted — the "validated, awaiting human selection" state'
+      },
+      'invalid': {
+        def: 'Quote extraction was wrong or the quote document is corrupted/unreadable. The data cannot be trusted. Needs re-extraction or the carrier needs to resend.',
+        who: 'Validation fails — extraction errors, mismatched data, or garbage input.',
+        src: 'interpreted — terminal, the quote entity is dead'
+      },
+      'selected': {
+        def: 'This quote has been chosen for the customer proposal. Among all competing quotes for this coverage, this one was selected as the best option. Moves forward to proposal/sales.',
+        who: 'Operator selects this quote over alternatives.',
+        src: 'interpreted — terminal-win, triggers proposal flow'
+      },
+      'not_selected': {
+        def: 'Quote was valid but not chosen. A different carrier\'s quote was selected instead (better price, better terms, better carrier). The quote is preserved for records but won\'t be proposed.',
+        who: 'Operator selected a competing quote. This one is a runner-up.',
+        src: 'interpreted — terminal, exists for audit trail'
+      },
+      'cancelled': {
+        def: 'Quote was cancelled — customer withdrew, opportunity closed, or quote expired before a decision was made.',
+        who: 'Operator or system cancellation.',
+        src: 'interpreted — universal escape hatch'
+      },
+    }
+  },
+  InstantQuote: {
+    initial: 'ready',
+    terminals: ['declined', 'approved', 'cancelled'],
+    transitions: {
+      'ready': ['in_progress', 'cancelled'],
+      'in_progress': ['quote_received', 'cancelled'],
+      'quote_received': ['accepted', 'declined', 'cancelled'],
+      'accepted': ['approved', 'cancelled']
+    },
+    stateTypes: {
+      'ready': 'initial', 'in_progress': 'active', 'quote_received': 'active',
+      'accepted': 'active', 'declined': 'terminal', 'approved': 'terminal-win', 'cancelled': 'terminal'
+    },
+    description: 'Portal/API instant quote flow. Separate from the brokered Quote machine — this tracks the synchronous quote-bind lifecycle for instant-quote channels.',
+    stateDefinitions: {
+      'ready': {
+        def: 'Instant quote request is queued and ready to be submitted to the carrier portal or API. All required application data has been assembled.',
+        src: 'interpreted — pre-submission state'
+      },
+      'in_progress': {
+        def: 'Request has been submitted to the carrier portal/API. Waiting for their system to return a response. For true instant quotes, this is seconds; for some portals, minutes.',
+        src: 'interpreted — the "waiting for API response" state'
+      },
+      'quote_received': {
+        def: 'Carrier portal/API returned a quote. Premium and terms are now known. Requires a decision: accept or decline.',
+        src: 'interpreted — quote is in hand, decision needed'
+      },
+      'accepted': {
+        def: 'Customer/operator accepted the instant quote. Now proceeding to bind via the portal. Waiting for carrier system to confirm the bind.',
+        src: 'interpreted — acceptance submitted, awaiting carrier confirmation'
+      },
+      'declined': {
+        def: 'The instant quote was declined — either the carrier\'s system declined to quote (risk not acceptable), or the operator/customer rejected the offered terms.',
+        src: 'interpreted — terminal, no bind'
+      },
+      'approved': {
+        def: 'Instant quote was accepted and the carrier confirmed the bind. Coverage is now in force via the portal/API channel.',
+        src: 'interpreted — terminal-win, equivalent to "bound" in the brokered flow'
+      },
+      'cancelled': {
+        def: 'Instant quote flow was cancelled at any point before completion.',
+        src: 'interpreted — universal escape hatch'
+      },
+    }
+  },
+  OrderProduct: {
+    initial: 'new_quote',
+    terminals: ['closed_win', 'closed_loss'],
+    transitions: {
+      'new_quote': ['quote_sent', 'quote_expiring', 'closed_loss'],
+      'revised_quote': ['quote_sent', 'quote_expiring', 'closed_loss'],
+      'quote_sent': ['reviewing', 'quote_expiring', 'closed_loss'],
+      'reviewing': ['awaiting_payment', 'price_objection', 'coverage_revision', 'quote_expiring', 'closed_loss'],
+      'price_objection': ['revised_quote', 'reviewing', 'closed_loss'],
+      'coverage_revision': ['revised_quote', 'reviewing', 'closed_loss'],
+      'awaiting_payment': ['closed_win', 'price_objection', 'closed_loss'],
+      'quote_expiring': ['reviewing', 'closed_loss']
+    },
+    stateTypes: {
+      'new_quote': 'initial', 'revised_quote': 'active', 'quote_sent': 'active',
+      'reviewing': 'active', 'price_objection': 'parked', 'coverage_revision': 'parked',
+      'awaiting_payment': 'active', 'quote_expiring': 'parked',
+      'closed_win': 'terminal-win', 'closed_loss': 'terminal'
+    },
+    description: 'Sales engagement per product. Happy path: new_quote → quote_sent → reviewing → awaiting_payment → closed_win. Objection paths loop through revised_quote.',
+    stateDefinitions: {
+      'new_quote': {
+        def: 'First quote received for this coverage line. Entry point into the sales engagement. Quote has been validated and is ready to be pitched to the customer.',
+        src: 'from code — "first quote received for this coverage line"'
+      },
+      'revised_quote': {
+        def: 'A revised quote has come back after a price objection or coverage revision. Re-entry point — same flow as new_quote but indicates this is a rework cycle.',
+        src: 'from code — "re-quoted after rework/remarketing"'
+      },
+      'quote_sent': {
+        def: 'The proposal has been sent to the customer. Email with quote details, coverage summary, and pricing has been delivered. Waiting for customer to review.',
+        src: 'interpreted — the "proposal in front of customer" state'
+      },
+      'reviewing': {
+        def: 'Customer is actively reviewing the proposal. May ask questions, request changes, or proceed to payment. This is the main decision-making state.',
+        src: 'interpreted — the "customer is thinking about it" state'
+      },
+      'price_objection': {
+        def: 'Customer says the price is too high. Triggers a rework cycle: operator goes back to carrier for revised pricing, or tries a different carrier. Loops to revised_quote when new pricing is obtained.',
+        src: 'from code — "objection path", loops through revised_quote'
+      },
+      'coverage_revision': {
+        def: 'Customer wants different coverage terms — different limits, deductibles, endorsements, or coverage lines. Similar to price_objection but about terms rather than price. Loops to revised_quote.',
+        src: 'from code — "objection path", loops through revised_quote'
+      },
+      'awaiting_payment': {
+        def: 'Customer agreed to the quote. Payment is being collected — could be credit card, ACH, premium finance, or carrier direct. Waiting for payment confirmation.',
+        note: 'Can still fall back to price_objection if customer objects during payment flow.',
+        src: 'interpreted — the "money is in transit" state'
+      },
+      'quote_expiring': {
+        def: 'Quote validity period is about to expire or has expired. Time-based state that can be entered from most active states. Operator needs to re-engage customer or get fresh quotes.',
+        src: 'from code — "time-based state, can be reached from any non-terminal active state"'
+      },
+      'closed_win': {
+        def: 'Payment received, coverage purchased. The sale is complete for this product line. Customer is now a policyholder for this coverage.',
+        src: 'from code — terminal-win'
+      },
+      'closed_loss': {
+        def: 'Customer did not purchase. Could be: chose a competitor, decided not to buy insurance, business closed, or quote expired without action.',
+        src: 'from code — terminal, reachable from any active state'
+      },
+    }
+  },
+  Payment: {
+    initial: 'initiated',
+    terminals: ['settled', 'failed', 'cancelled'],
+    transitions: {
+      'initiated': ['processing', 'cancelled'],
+      'processing': ['settled', 'awaiting_settlement', 'failed'],
+      'awaiting_settlement': ['settled', 'failed']
+    },
+    stateTypes: {
+      'initiated': 'initial', 'processing': 'active', 'awaiting_settlement': 'active',
+      'settled': 'terminal-win', 'failed': 'terminal', 'cancelled': 'terminal'
+    },
+    description: 'Tracks a single money movement. Same machine for all purposes (premium, refund, chargeback, endorsement) and all channels (card, ACH, carrier direct, premium finance).',
+    stateDefinitions: {
+      'initiated': {
+        def: 'Payment record created but not yet submitted to processor. All payment details are captured (amount, method, purpose). Ready to be charged.',
+        src: 'from code — initial state'
+      },
+      'processing': {
+        def: 'Payment has been submitted to the processor (Finix, Ascend, carrier, or lender). The processor is executing the charge. For card payments, this may be near-instant. For ACH, this is the "pending" period.',
+        src: 'from code — "Card: processing → settled (near-instant via Finix webhook)"'
+      },
+      'awaiting_settlement': {
+        def: 'Processor acknowledged the payment but funds haven\'t settled yet. Common for ACH (3-5 business days), carrier direct billing (manual reconciliation), and premium finance (lender funding).',
+        note: 'Card payments typically skip this state and go directly processing → settled.',
+        src: 'from code — "ACH: processing → awaiting_settlement → settled (3-5 biz days)"'
+      },
+      'settled': {
+        def: 'Funds have been received and reconciled. The payment is complete. For premium finance, this means the lender has funded.',
+        src: 'from code — terminal-win'
+      },
+      'failed': {
+        def: 'Payment processing failed. Card declined, ACH returned, or lender rejected. A new Payment entity may be created for retry — this one is dead.',
+        src: 'from code — terminal'
+      },
+      'cancelled': {
+        def: 'Payment was cancelled before processing completed. Customer changed their mind or operator voided the transaction.',
+        src: 'interpreted — terminal'
+      },
+    }
+  },
+  FinancingAgreement: {
+    initial: 'quote_requested',
+    terminals: ['active', 'declined', 'cancelled'],
+    transitions: {
+      'quote_requested': ['quote_received', 'declined', 'cancelled'],
+      'quote_received': ['submitted_to_lender', 'quote_requested', 'cancelled'],
+      'submitted_to_lender': ['lender_processing', 'declined'],
+      'lender_processing': ['active', 'declined']
+    },
+    stateTypes: {
+      'quote_requested': 'initial', 'quote_received': 'active',
+      'submitted_to_lender': 'active', 'lender_processing': 'active',
+      'active': 'terminal-win', 'declined': 'terminal', 'cancelled': 'terminal'
+    },
+    description: 'Premium financing lifecycle. Tracks the provider/lender side: quoting terms, submitting signed PFA to lender, and funding. Providers: PBS, GoTo, Ascend.',
+    stateDefinitions: {
+      'quote_requested': {
+        def: 'Premium Finance Agreement (PFA) quote has been requested from the provider. Waiting for them to return financing terms (down payment, monthly installment, interest rate, APR).',
+        note: 'Can be re-entered from quote_received for re-quoting (e.g., premium changed, different terms needed).',
+        src: 'from code — "Requesting and negotiating a PFA quote from the provider"'
+      },
+      'quote_received': {
+        def: 'Provider returned financing terms. Down payment amount, monthly installment, interest rate, and APR are now known. Customer needs to review and accept the terms before we submit to lender.',
+        note: 'Can loop back to quote_requested for revised terms without creating a new entity.',
+        src: 'from code — "The re-quote loop (quote_received → quote_requested) allows requesting revised terms"'
+      },
+      'submitted_to_lender': {
+        def: 'Signed PFA has been submitted to the lender for approval and funding. This happens after the customer signs the financing agreement (typically via DocuSign in the Order flow).',
+        src: 'from code — "Submitting the signed PFA to the lender (after Order\'s DocuSign completes)"'
+      },
+      'lender_processing': {
+        def: 'Lender is reviewing and processing the financing agreement. Verifying creditworthiness, confirming terms, and preparing to fund the premium.',
+        src: 'from code — "Lender review and funding"'
+      },
+      'active': {
+        def: 'Lender approved and funded the premium finance agreement. Funds have been disbursed. The customer will now make monthly installment payments to the lender.',
+        src: 'interpreted — terminal-win, financing is live'
+      },
+      'declined': {
+        def: 'Lender declined to finance. Customer doesn\'t qualify, or terms are unacceptable to the lender. Customer will need to pay in full or find alternative financing.',
+        src: 'interpreted — terminal, can happen at submission or processing'
+      },
+      'cancelled': {
+        def: 'Financing request was cancelled. Customer decided to pay in full, chose a different financing provider, or the insurance deal fell through.',
+        src: 'interpreted — terminal'
+      },
+    }
+  },
+  SubmissionPacket: {
+    initial: 'draft',
+    terminals: ['sent'],
+    transitions: {
+      'draft': ['ready'],
+      'ready': ['sent', 'draft']
+    },
+    stateTypes: {
+      'draft': 'initial', 'ready': 'active', 'sent': 'terminal-win'
+    },
+    description: 'Packet preparation lifecycle. Simple: draft → ready → sent. The actual container for the email, documents, and underwriter list.',
+    stateDefinitions: {
+      'draft': {
+        def: 'Packet is being assembled. ACORD forms being generated, documents being linked, email being composed, carrier recommendations being computed. Agora\'s PacketGenerationWorkflow (11-step Temporal saga) drives this.',
+        note: 'Can be re-entered from ready if operator finds issues and needs to rebuild.',
+        src: 'interpreted — initial state, assembly in progress'
+      },
+      'ready': {
+        def: 'All components assembled: ACORD 125/126, supplemental forms, loss runs, email subject/body, and target underwriter list. Packet is ready for dispatch. Operator may review before sending.',
+        note: 'This gates the SubmissionIntent → submitted transition.',
+        src: 'interpreted — the "ready to send" checkpoint'
+      },
+      'sent': {
+        def: 'Packet has been dispatched — emails sent to underwriters via VegapunkEmailWorkflow, portal submissions made, or API calls fired. This packet is now immutable.',
+        src: 'interpreted — terminal, packet is out the door'
+      },
+    }
+  },
+  RenewalIntent: {
+    initial: 'renewal_upcoming',
+    terminals: ['renewal_bound', 'renewal_lost'],
+    transitions: {
+      'renewal_upcoming': ['renewal_contacted', 'renewal_handed_off', 'renewal_lost'],
+      'retention_triggered': ['renewal_contacted', 'renewal_lost'],
+      'renewal_contacted': ['renewal_handed_off', 'renewal_lost'],
+      'renewal_info_review': ['renewal_handed_off', 'renewal_contacted', 'renewal_lost'],
+      'renewal_handed_off': ['renewal_bound', 'renewal_lost'],
+      'renewal_lost': ['retention_triggered']
+    },
+    stateTypes: {
+      'renewal_upcoming': 'initial', 'retention_triggered': 'initial',
+      'renewal_contacted': 'active', 'renewal_info_review': 'active',
+      'renewal_handed_off': 'active',
+      'renewal_bound': 'terminal-win', 'renewal_lost': 'terminal'
+    },
+    description: 'Renewal and retention lifecycle. Two entry points: standard 90-day trigger or mid-term retention event. After handoff, a linked Opportunity handles the submission/quoting pipeline.',
+    stateDefinitions: {
+      'renewal_upcoming': {
+        def: 'Standard entry: policy expiration date is approaching (typically 90 days out). System auto-creates a renewal intent. Priority: normal (14-day SLA).',
+        src: 'from code — "standard 90-day renewal trigger"'
+      },
+      'retention_triggered': {
+        def: 'Mid-term retention event: cancellation notice received, carrier non-renewal, non-payment, or customer wants to switch carriers. Priority: urgent (3-day SLA) or high (7-day SLA) depending on type.',
+        note: 'Can also be re-entered from renewal_lost (lost → retention_triggered for save attempts).',
+        src: 'from code — "mid-term event (cancellation, non-renewal, non-payment)"'
+      },
+      'renewal_contacted': {
+        def: 'Customer has been contacted about their renewal. Engagement initiated — discussing options, gathering updated information, determining if they want to renew or shop.',
+        src: 'from code — "customer engagement phase"'
+      },
+      'renewal_info_review': {
+        def: 'Condensed working state covering both information gathering and review. Operator is working the renewal — reviewing current terms, comparing options, preparing for handoff to the submission pipeline.',
+        note: 'Legacy states (info_gathering, pipeline_in_progress, quote_received, remarketing, pitched) were merged into this single working state.',
+        src: 'from code — "condensed working state that covers both information gathering and review"'
+      },
+      'renewal_handed_off': {
+        def: 'Renewal has been handed off to the submission/quoting pipeline. A linked Opportunity + CoverageIntent has been created to handle the actual placement. The renewal intent now waits for resolution from that pipeline.',
+        note: 'Post-handoff tracking (quoting, remarketing, etc.) is delegated to the linked CoverageIntent.',
+        src: 'from code — "linked Opportunity + CoverageIntent handles the submission/quoting/binding pipeline"'
+      },
+      'renewal_bound': {
+        def: 'Renewal successfully completed. Policy has been renewed (same carrier, different carrier, or saved from cancellation). Outcome is recorded: renewed_same_carrier, renewed_different_carrier, saved_from_cancellation.',
+        src: 'from code — terminal-win'
+      },
+      'renewal_lost': {
+        def: 'Renewal failed. Customer didn\'t renew — lost to competitor, chose no coverage, business closed, or non-payment. Outcome recorded: lost_to_competitor, lost_no_coverage, lost_business_closed, lost_non_payment, flat_cancel_no_renewal.',
+        note: 'Can transition to retention_triggered for a save attempt.',
+        src: 'from code — terminal, but can loop to retention_triggered'
+      },
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════
+// DATA: Entity hierarchy
+// ═══════════════════════════════════════════════
+const ENTITIES = [
+  {
+    name: 'Opportunity', depth: 0, cardinality: '',
+    desc: 'Top-level container. Status aggregated from child CoverageIntents.',
+    fields: ['id', 'account_id', 'status (derived)', 'outcome (derived)'],
+    statuses: [
+      { field: 'status', kind: 'derived', derivedFrom: 'Aggregated from all child CoverageIntent statuses', values: [
+        { val: 'in_progress', type: 'active', note: 'Any CI still in-flight' },
+        { val: 'won', type: 'terminal-win', note: 'All CIs reached service' },
+        { val: 'lost', type: 'terminal', note: 'All CIs in terminal failure (cancelled/abandoned/disqualified)' },
+        { val: 'partial', type: 'active', note: 'Mix of won + lost outcomes across CIs' },
+      ]},
+      { field: 'outcome', kind: 'derived', derivedFrom: 'Aggregated from all child CoverageIntent outcomes', values: [
+        { val: 'won', type: 'terminal-win', note: 'All intents won' },
+        { val: 'lost', type: 'terminal', note: 'All intents lost' },
+        { val: 'cancelled', type: 'terminal', note: 'All intents cancelled' },
+        { val: 'partial', type: 'active', note: 'Mixed outcomes' },
+        { val: 'null', type: 'active', note: 'Some intents still in-flight' },
+      ]},
+    ]
+  },
+  {
+    name: 'CoverageIntent (OLI)', depth: 1, cardinality: '1:Many',
+    desc: 'Phase-level lifecycle coordinator. One per product per opportunity.',
+    fields: ['id (= OLI ID)', 'opportunity_id', 'product_id', 'status (phase)', 'detail_status', 'outcome', 'source', 'channel'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'IntentMachine', note: 'Phase-level. Transitioned by Process Manager on child events, or manually.', values: [
+        { val: 'intake', type: 'initial', note: 'Initial phase — IntakeWorkflow active' },
+        { val: 'submission', type: 'active', note: 'SubmissionIntent active — building packet' },
+        { val: 'placement', type: 'active', note: 'PlacementIntent active — awaiting UW' },
+        { val: 'sales', type: 'active', note: 'Post-quote — order/negotiation phase' },
+        { val: 'binding', type: 'active', note: 'BindingIntent active — closing' },
+        { val: 'service', type: 'terminal-win', note: 'Policy bound and servicing' },
+        { val: 'abandoned', type: 'terminal', note: 'Customer abandoned' },
+        { val: 'disqualified', type: 'terminal', note: 'Did not meet requirements' },
+        { val: 'cancelled', type: 'terminal', note: 'Operator or system cancelled' },
+      ]},
+      { field: 'detail_status', kind: 'derived', derivedFrom: 'Persisted from active child entity status (e.g., SI.status, PI.status)', values: [
+        { val: '(any child status)', type: 'active', note: 'Written by Process Manager on every child transition' },
+      ]},
+      { field: 'computed_status', kind: 'derived', derivedFrom: 'In-memory overlay: outcome wins over status', values: [
+        { val: 'service', type: 'terminal-win', note: 'If outcome = won' },
+        { val: 'cancelled', type: 'terminal', note: 'If outcome = lost or cancelled' },
+        { val: '(status)', type: 'active', note: 'Otherwise, raw status passthrough' },
+      ]},
+      { field: 'outcome', kind: 'leaf', note: 'Set by Process Manager on terminal child events', values: [
+        { val: 'won', type: 'terminal-win', note: 'BindingIntent → bound' },
+        { val: 'lost', type: 'terminal', note: 'PlacementIntent → declined_all, or BindingIntent → bind_failed' },
+        { val: 'cancelled', type: 'terminal', note: 'Any intent → cancelled' },
+        { val: 'null', type: 'active', note: 'Still in-flight' },
+      ]},
+      { field: 'sla_status', kind: 'derived', derivedFrom: 'Computed from SLA deadlines and current time', values: [
+        { val: 'none', type: 'active', note: 'No SLA set' },
+        { val: 'on_track', type: 'active', note: 'Before deadline, > 25% time remaining' },
+        { val: 'at_risk', type: 'parked', note: '< 25% time remaining' },
+        { val: 'breached', type: 'terminal', note: 'Past deadline' },
+      ]},
+    ]
+  },
+  {
+    name: 'IntakeWorkflow', depth: 2, cardinality: '1:1 with OLI',
+    desc: 'Per-intent intake micro-states with SLA tracking.',
+    fields: ['id', 'oli_id', 'status', 'assigned_to', 'sla_deadline', 'reopened_count'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'IntakeWorkflowMachine', note: 'Transitioned by operators or process manager.', values: [
+        { val: 'collecting', type: 'initial', note: 'Gathering application info (SLA: 48h)' },
+        { val: 'reviewing', type: 'active', note: 'Reviewing completeness (SLA: 24h)' },
+        { val: 'remediation', type: 'parked', note: 'Missing info, back to customer (SLA: 48h)' },
+        { val: 'ready', type: 'terminal-win', note: 'Ready to hand off to submission' },
+        { val: 'abandoned', type: 'terminal', note: 'Customer stopped responding' },
+        { val: 'disqualified', type: 'terminal', note: 'Does not meet underwriting criteria' },
+      ]},
+      { field: 'sla_status', kind: 'derived', derivedFrom: 'Computed from sla_deadline + current time', values: [
+        { val: 'met', type: 'terminal-win', note: 'Terminal or ready' },
+        { val: 'on_track', type: 'active', note: 'Before deadline, enough time' },
+        { val: 'at_risk', type: 'parked', note: '< 25% time remaining' },
+        { val: 'breached', type: 'terminal', note: 'Past deadline' },
+      ]},
+      { field: 'derived_intake_status', kind: 'derived', derivedFrom: 'Opportunity-level rollup from multiple IntakeWorkflows', values: [
+        { val: 'awaiting_intents', type: 'active', note: 'No intake workflows yet' },
+        { val: 'collecting_info', type: 'active', note: 'Any in collecting' },
+        { val: 'in_review', type: 'active', note: 'Any in reviewing' },
+        { val: 'needs_remediation', type: 'parked', note: 'Any in remediation' },
+        { val: 'submission_ready', type: 'terminal-win', note: 'All ready' },
+        { val: 'handed_off', type: 'terminal-win', note: 'All handed off to submission' },
+      ]},
+    ]
+  },
+  {
+    name: 'SubmissionIntent', depth: 2, cardinality: '1:1 with OLI',
+    desc: 'Tracks packet building from preparing → submitted.',
+    fields: ['id', 'oli_id', 'status', 'flow_type', 'submission_type', 'prior_si_id'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'SubmissionIntentMachine', note: 'Transitioned by Agora workflows, operators, or Process Manager.', values: [
+        { val: 'preparing', type: 'initial', note: 'Building submission packet' },
+        { val: 'needs_info', type: 'parked', note: 'Missing documents or data — blocks packet' },
+        { val: 'packet_ready', type: 'active', note: 'Packet built, ready to dispatch' },
+        { val: 'on_hold', type: 'parked', note: 'Customer or operator pause' },
+        { val: 'submitted', type: 'terminal-win', note: 'Dispatched to market — PI created' },
+        { val: 'cancelled', type: 'terminal', note: 'Cancelled before submission' },
+      ]},
+      { field: 'flow_type', kind: 'leaf', note: 'Set at creation', values: [
+        { val: 'traditional', type: 'active', note: 'Brokered submission' },
+        { val: 'instant_quote', type: 'active', note: 'Portal/API instant quote' },
+      ]},
+      { field: 'submission_type', kind: 'leaf', note: 'Set at creation', values: [
+        { val: 'initial', type: 'active', note: 'First submission for this OLI' },
+        { val: 'remarketing', type: 'active', note: 'Re-submission after decline' },
+        { val: 'renewal', type: 'active', note: 'Renewal submission' },
+      ]},
+      { field: 'outcome', kind: 'derived', derivedFrom: 'Computed from status', values: [
+        { val: 'submitted', type: 'terminal-win', note: 'Status = submitted' },
+        { val: 'cancelled', type: 'terminal', note: 'Status = cancelled' },
+        { val: '(empty)', type: 'active', note: 'Still in-flight' },
+      ]},
+    ]
+  },
+  {
+    name: 'SubmissionPacket', depth: 3, cardinality: '1:1 with SI',
+    desc: 'The actual packet container with email + documents.',
+    fields: ['id', 'submission_intent_id', 'email_subject', 'email_body', 'document_ids[]', 'underwriter_ids[]', 'status'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'SubmissionPacketMachine', note: 'Transitioned by Agora PacketGenerationWorkflow.', values: [
+        { val: 'draft', type: 'initial', note: 'Packet being assembled' },
+        { val: 'ready', type: 'active', note: 'All docs + email generated, awaiting dispatch' },
+        { val: 'sent', type: 'terminal-win', note: 'Dispatched to underwriters' },
+      ]},
+    ]
+  },
+  {
+    name: 'RFQ', depth: 2, cardinality: '1:Many per OLI',
+    desc: 'One per carrier submission. Status materialized from line items.',
+    fields: ['id', 'submission_intent_id', 'opportunity_id', 'channel', 'carrier_id', 'underwriter_id', 'cached_status (derived)'],
+    statuses: [
+      { field: 'cached_status', kind: 'materialized', derivedFrom: 'Materialized from child RFQLineItem statuses', values: [
+        { val: 'submitted', type: 'initial', note: 'All line items pending' },
+        { val: 'awaiting_quote', type: 'active', note: 'Some items past pending (brokered channel)' },
+        { val: 'awaiting_portal_result', type: 'active', note: 'Some items past pending (portal channel)' },
+        { val: 'triaging', type: 'parked', note: 'Any line item in info_requested' },
+        { val: 'completed', type: 'terminal-win', note: 'All line items in terminal state' },
+        { val: 'withdrawn', type: 'terminal', note: 'All line items withdrawn' },
+      ]},
+      { field: 'channel', kind: 'leaf', note: 'Set at creation — determines UX flow', values: [
+        { val: 'brokered', type: 'active', note: 'Traditional broker submission via email' },
+        { val: 'instant_quote_portal', type: 'active', note: 'Carrier portal / web UI' },
+        { val: 'coverforce_api', type: 'active', note: 'Programmatic API submission' },
+      ]},
+      { field: 'assigned_type', kind: 'leaf', note: 'Who is handling this RFQ', values: [
+        { val: 'human', type: 'active', note: 'Operator managing follow-up' },
+        { val: 'ai_agent', type: 'active', note: 'Jade/harper-claw managing follow-up' },
+        { val: 'null', type: 'active', note: 'Unassigned' },
+      ]},
+    ]
+  },
+  {
+    name: 'RFQ Line Item', depth: 3, cardinality: '1:Many per RFQ',
+    desc: 'One per coverage per carrier. Status derived FROM PlacementIntent (design target).',
+    fields: ['id', 'rfq_id', 'oli_id', 'submission_intent_id', 'status', 'quote_id', 'declination_reason'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'RFQLineItemMachine', note: 'Currently transitioned by MiniOrc (Atlas Lackey) via POST /rfq-items/{id}/transition. Design target: derive from PI.', values: [
+        { val: 'pending', type: 'initial', note: 'Just created, not yet acknowledged' },
+        { val: 'under_review', type: 'active', note: 'UW is actively reviewing' },
+        { val: 'info_requested', type: 'parked', note: 'UW needs more info — customer or broker blocker' },
+        { val: 'price_indication', type: 'active', note: 'Got a price indication, not yet formal quote' },
+        { val: 'quoted', type: 'terminal-win', note: 'Formal quote received' },
+        { val: 'declined', type: 'terminal', note: 'UW declined this coverage' },
+        { val: 'withdrawn', type: 'terminal', note: 'We withdrew the request' },
+      ]},
+      { field: 'declination_category', kind: 'leaf', note: 'Set when status → declined', values: [
+        { val: 'appetite', type: 'terminal', note: 'Carrier appetite mismatch' },
+        { val: 'class_of_business', type: 'terminal', note: 'Class not supported' },
+        { val: 'loss_history', type: 'terminal', note: 'Loss history too severe' },
+        { val: 'premium_size', type: 'terminal', note: 'Premium too small for carrier' },
+        { val: 'state_restriction', type: 'terminal', note: 'Not writing in this state/territory' },
+        { val: 'information_missing', type: 'terminal', note: 'Could not get required info' },
+        { val: 'other', type: 'terminal', note: 'Other reason (see notes)' },
+      ]},
+    ]
+  },
+  {
+    name: 'PlacementIntent', depth: 4, cardinality: '1:1 with RFQLI',
+    desc: 'SOURCE OF TRUTH for placement state. Tracks waiting→quoted→bound. v0.0 — states are not set in stone.',
+    fields: ['id', 'oli_id (→ rfqli_id)', 'submission_intent_id', 'status', 'outcome (computed)'],
+    highlight: true,
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'PlacementIntentMachine', note: 'v0.0 — will support manual operator transitions + future automated signals. States are provisional.', values: [
+        { val: 'waiting_for_uw', type: 'initial', note: 'Submitted to market, waiting for UW response' },
+        { val: 'quoted', type: 'active', note: 'Quote received from carrier' },
+        { val: 'proposal_sent', type: 'active', note: 'Quote validated and sent to customer' },
+        { val: 'on_hold', type: 'parked', note: 'Paused — customer restructuring, negotiation hold, etc.' },
+        { val: 'bound', type: 'terminal-win', note: 'Customer accepted, coverage bound' },
+        { val: 'declined_all', type: 'terminal', note: 'UW declined — no quote possible' },
+        { val: 'resubmission', type: 'terminal', note: 'Wrong carrier or bad packet — resubmit' },
+        { val: 'remarketing', type: 'terminal', note: 'Try different carriers or markets' },
+        { val: 'cancelled', type: 'terminal', note: 'Cancelled — customer withdrew or operator killed it' },
+      ]},
+      { field: 'outcome', kind: 'derived', derivedFrom: 'Computed from terminal status', values: [
+        { val: 'won', type: 'terminal-win', note: 'Status = bound' },
+        { val: 'lost', type: 'terminal', note: 'Status = declined_all' },
+        { val: 'resubmission', type: 'terminal', note: 'Status = resubmission' },
+        { val: 'remarketing', type: 'terminal', note: 'Status = remarketing' },
+        { val: 'cancelled', type: 'terminal', note: 'Status = cancelled' },
+        { val: '(empty)', type: 'active', note: 'Non-terminal — still in-flight' },
+      ]},
+    ]
+  },
+  {
+    name: 'Quote', depth: 3, cardinality: 'Many:1 with RFQLI',
+    desc: 'Carrier response. May be bundled (one quote → many RFQLIs).',
+    fields: ['id', 'account_id', 'opp_id', 'rfq_id', 'status', 'quote_type', 'total_premium', 'carrier_name'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'QuoteMachine', note: 'Transitioned by quote validation service or operators.', values: [
+        { val: 'pending_validation', type: 'initial', note: 'Just received — needs extraction/validation' },
+        { val: 'pending_decision', type: 'active', note: 'Validated — operator or customer needs to decide' },
+        { val: 'selected', type: 'terminal-win', note: 'Selected for proposal to customer' },
+        { val: 'not_selected', type: 'terminal', note: 'Not chosen (another quote was better)' },
+        { val: 'invalid', type: 'terminal', note: 'Failed validation — bad data or extraction error' },
+        { val: 'cancelled', type: 'terminal', note: 'Cancelled' },
+      ]},
+      { field: 'quote_type', kind: 'leaf', note: 'Set at creation/extraction', values: [
+        { val: 'price_indication', type: 'active', note: 'Informal price range, not bindable' },
+        { val: 'indication_verified', type: 'active', note: 'Indication confirmed by UW' },
+        { val: 'full_quote', type: 'active', note: 'Formal bindable quote' },
+      ]},
+    ]
+  },
+  {
+    name: 'BindingIntent', depth: 2, cardinality: '1:1 with OLI',
+    desc: 'Closing and binding process after sales.',
+    fields: ['id', 'oli_id', 'status', 'quote_source'],
+    statuses: [
+      { field: 'status', kind: 'leaf', machine: 'BindingIntentMachine', note: 'Transitioned by operators and binding workflows.', values: [
+        { val: 'collecting_subjectivities', type: 'initial', note: 'Gathering required docs/conditions' },
+        { val: 'preparing_bind_packet', type: 'active', note: 'Assembling bind order' },
+        { val: 'awaiting_signatures', type: 'active', note: 'Waiting for customer/broker signatures' },
+        { val: 'preparing_to_bind', type: 'active', note: 'Final prep before binder request' },
+        { val: 'awaiting_binder', type: 'active', note: 'Submitted to carrier, waiting for binder' },
+        { val: 'on_hold', type: 'parked', note: 'Paused — subjectivity issue, payment hold, etc.' },
+        { val: 'bound', type: 'terminal-win', note: 'Policy bound!' },
+        { val: 'cancelled', type: 'terminal', note: 'Customer or operator cancelled' },
+        { val: 'bind_failed', type: 'terminal', note: 'Carrier rejected bind request' },
+        { val: 'rework', type: 'terminal', note: 'Needs to go back to sales (coverage/price change)' },
+      ]},
+      { field: 'quote_source', kind: 'leaf', note: 'Set at creation', values: [
+        { val: 'broker', type: 'active', note: 'Brokered quote' },
+        { val: 'instant_quote', type: 'active', note: 'Portal/API instant quote' },
+      ]},
+      { field: 'outcome', kind: 'derived', derivedFrom: 'Computed from terminal status', values: [
+        { val: 'won', type: 'terminal-win', note: 'Status = bound' },
+        { val: 'lost', type: 'terminal', note: 'Status = bind_failed' },
+        { val: 'cancelled', type: 'terminal', note: 'Status = cancelled' },
+        { val: 'rework', type: 'terminal', note: 'Status = rework' },
+        { val: '(empty)', type: 'active', note: 'Still in-flight' },
+      ]},
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════
+// DATA: PlacementIntent transition triggers
+// ═══════════════════════════════════════════════
+const PI_TRIGGERS = [
+  { from: 'waiting_for_uw', to: 'quoted', trigger: 'placement.quote_received signal (Jade/harper-claw → MiniOrc)' },
+  { from: 'waiting_for_uw', to: 'on_hold', trigger: 'Operator pauses (MegaBro → CLS) or escalation_needed signal' },
+  { from: 'waiting_for_uw', to: 'cancelled', trigger: 'Operator cancels or customer withdraws' },
+  { from: 'waiting_for_uw', to: 'resubmission', trigger: 'Needs resubmission (wrong carrier, bad packet)' },
+  { from: 'waiting_for_uw', to: 'remarketing', trigger: 'All carriers declined pre-quote → try new markets' },
+  { from: 'quoted', to: 'proposal_sent', trigger: 'Quote validated + sent to customer' },
+  { from: 'quoted', to: 'on_hold', trigger: 'Customer pause or negotiation hold' },
+  { from: 'quoted', to: 'remarketing', trigger: 'Quote unacceptable, try different carriers' },
+  { from: 'quoted', to: 'cancelled', trigger: 'Customer withdraws after seeing quote' },
+  { from: 'proposal_sent', to: 'bound', trigger: 'Customer accepts → binding initiated' },
+  { from: 'proposal_sent', to: 'on_hold', trigger: 'Customer needs time to decide' },
+  { from: 'proposal_sent', to: 'remarketing', trigger: 'Customer rejects proposal, try others' },
+  { from: 'proposal_sent', to: 'cancelled', trigger: 'Customer abandons' },
+  { from: 'on_hold', to: 'waiting_for_uw', trigger: 'Resume: back to waiting for UW response' },
+  { from: 'on_hold', to: 'quoted', trigger: 'Resume: quote arrived while on hold' },
+  { from: 'on_hold', to: 'proposal_sent', trigger: 'Resume: directly to proposal stage' },
+  { from: 'on_hold', to: 'cancelled', trigger: 'Cancel from hold' },
+];
+
+// ═══════════════════════════════════════════════
+// DATA: Scenarios
+// ═══════════════════════════════════════════════
+const SCENARIOS = [
+  {
+    name: '1. Happy Path — Single Coverage, Single Carrier',
+    desc: 'Bright Horizons Daycare Center • General Liability • RT Specialty (Shannon Hurst)',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Agora dispatches GL submission to RT Specialty',
+        detail: 'Opp 488401 | OLI 42801 (General Liability, $1M/$2M occ/agg)\nPacket: ACORD 125+126, 3 supplementals, loss runs\nUW: Shannon Hurst (shannon.hurst@rtspecialty.com)\nRFQ #3201 created → RFQLI #8801 → PI #16801',
+        states: { 'SI (OLI 42801)': 'submitted', 'PI #16801': 'waiting_for_uw', 'RFQLI #8801': 'pending', 'RFQ #3201': 'submitted' }
+      },
+      {
+        day: 'Day 1',
+        event: 'Shannon @ RT Specialty: "Received, under review"',
+        detail: 'Email auto-classified: NO_ACTION (acknowledgment only)\nNo state change — just tracking that carrier received it',
+        states: { 'SI (OLI 42801)': 'submitted', 'PI #16801': 'waiting_for_uw', 'RFQLI #8801': 'pending', 'RFQ #3201': 'submitted' }
+      },
+      {
+        day: 'Day 3',
+        event: 'Shannon: "Please send 3 years of audited loss runs"',
+        detail: 'Email classified: info_requested\nBlocker type: customer (we need docs from the insured)\nOperator drafts email to Bright Horizons requesting loss runs',
+        states: { 'PI #16801': 'waiting_for_uw', 'RFQLI #8801': 'info_requested', 'RFQ #3201': 'triaging', 'Blocker': 'customer' }
+      },
+      {
+        day: 'Day 5',
+        event: 'Bright Horizons sends loss runs → Harper forwards to Shannon',
+        detail: 'Docs uploaded to Aether, linked to packet\nBlocker flips: now waiting on UW (ball in carrier\'s court)',
+        states: { 'PI #16801': 'waiting_for_uw', 'RFQLI #8801': 'under_review', 'RFQ #3201': 'awaiting_quote', 'Blocker': 'uw' }
+      },
+      {
+        day: 'Day 8',
+        event: 'No response from Shannon — automated follow-up sent',
+        detail: 'Cadence rule: 3 business days since last carrier contact\nDraft follow-up email generated for operator review',
+        states: { 'PI #16801': 'waiting_for_uw', 'RFQLI #8801': 'under_review', 'RFQ #3201': 'awaiting_quote', 'Blocker': 'uw' }
+      },
+      {
+        day: 'Day 10',
+        event: 'Shannon quotes GL: $3,500/yr ($1M occ / $2M agg)',
+        detail: 'Quote #5401 created (type: full_quote)\nQuote.status → pending_validation\nPI transitions → quoted\nRFQLI derives → quoted\nMegaBro /placements shows: "Quoted — $3,500"',
+        states: { 'PI #16801': 'quoted', 'RFQLI #8801': 'quoted', 'RFQ #3201': 'completed', 'Quote #5401': 'pending_validation' }
+      },
+    ]
+  },
+  {
+    name: '2. Multi-Carrier, Mixed Results — Trucking GL',
+    desc: 'Mountain West Logistics (Opp 489102) • Commercial Auto + GL • 3 wholesalers',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched to 3 wholesalers for GL ($2M/$4M)',
+        detail: 'OLI 43010 (Commercial General Liability)\nRFQ #3301 → RT Specialty (Shannon Hurst) → RFQLI #8901 → PI #16901\nRFQ #3302 → AmWins (David Park) → RFQLI #8902 → PI #16902\nRFQ #3303 → USLI (Jennifer Walsh) → RFQLI #8903 → PI #16903\nAll packets include: ACORD 125/126, fleet schedule, driver MVRs, 5yr loss runs',
+        states: { 'PI #16901 (RT)': 'waiting_for_uw', 'PI #16902 (AmWins)': 'waiting_for_uw', 'PI #16903 (USLI)': 'waiting_for_uw' }
+      },
+      {
+        day: 'Day 2',
+        event: 'Jennifer @ USLI: "We don\'t write long-haul trucking in CO"',
+        detail: 'Email classified: quote_declined\nDeclination category: state_restriction\nPI #16903 → declined_all\nRFQLI #8903 derives → declined',
+        states: { 'PI #16901 (RT)': 'waiting_for_uw', 'PI #16902 (AmWins)': 'waiting_for_uw', 'PI #16903 (USLI)': 'declined_all' }
+      },
+      {
+        day: 'Day 4',
+        event: 'David @ AmWins: "Need updated MVRs for drivers Johnson & Reyes"',
+        detail: 'Email classified: info_requested\nBlocker: customer (need docs from Mountain West)\nOperator requests MVRs from insured',
+        states: { 'PI #16901 (RT)': 'waiting_for_uw', 'PI #16902 (AmWins)': 'waiting_for_uw', 'PI #16903 (USLI)': 'declined_all', 'Blocker (AmWins)': 'customer' }
+      },
+      {
+        day: 'Day 7',
+        event: 'Shannon @ RT Specialty quotes GL: $12,150/yr',
+        detail: 'Quote #5501 (type: full_quote, $2M occ / $4M agg)\nAdmitted carrier: Travelers\nPI #16901 → quoted\nFirst quote in — operator can see it on MegaBro /placements',
+        states: { 'PI #16901 (RT)': 'quoted', 'PI #16902 (AmWins)': 'waiting_for_uw', 'PI #16903 (USLI)': 'declined_all', 'Quote (RT)': '$12,150' }
+      },
+      {
+        day: 'Day 9',
+        event: 'Mountain West sends updated MVRs → forwarded to David @ AmWins',
+        detail: 'Docs uploaded to Aether, linked to RFQ #3302\nBlocker flips to UW — ball in AmWins\' court',
+        states: { 'PI #16901 (RT)': 'quoted', 'PI #16902 (AmWins)': 'waiting_for_uw', 'PI #16903 (USLI)': 'declined_all', 'Blocker (AmWins)': 'uw' }
+      },
+      {
+        day: 'Day 12',
+        event: 'David @ AmWins quotes GL: $9,800/yr — better price!',
+        detail: 'Quote #5502 (type: full_quote, $2M occ / $4M agg)\nAdmitted carrier: Hartford\nPI #16902 → quoted\nNow 2 quotes to compare: RT $12,150 vs AmWins $9,800\nOperator sees "2 quoted, 1 declined" on /placements',
+        states: { 'PI #16901 (RT)': 'quoted', 'PI #16902 (AmWins)': 'quoted', 'PI #16903 (USLI)': 'declined_all', 'Best quote': '$9,800 (AmWins/Hartford)' }
+      },
+    ]
+  },
+  {
+    name: '3. Multi-Coverage Bundle — Daycare Package',
+    desc: 'Sunshine Kids Academy (Opp 488331) • GL + Prof Liability + Abuse & Molestation • 2 carriers',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched GL, PL, and A&M to 2 carriers',
+        detail: 'OLI 42760 (Professional Liability) | OLI 42761 (General Liability) | OLI 42762 (Abuse & Molestation)\nRFQ #3401 → RT Specialty: 3 RFQLIs (#8801-GL, #8802-PL, #8803-A&M) → 3 PIs (#16720-16722)\nRFQ #3402 → AmWins: 3 RFQLIs (#8804-GL, #8805-PL, #8806-A&M) → 3 PIs (#16723-16725)\nBundle submission — carriers quoting all 3 coverages together',
+        states: { 'PI 16720 (RT/PL)': 'waiting_for_uw', 'PI 16721 (RT/GL)': 'waiting_for_uw', 'PI 16722 (RT/A&M)': 'waiting_for_uw', 'PI 16723 (AW/PL)': 'waiting_for_uw', 'PI 16724 (AW/GL)': 'waiting_for_uw', 'PI 16725 (AW/A&M)': 'waiting_for_uw' }
+      },
+      {
+        day: 'Day 5',
+        event: 'RT Specialty quotes bundle: PL $3,500 + GL $2,800 + A&M $1,200',
+        detail: 'Quote #104 (bundled — covers all 3 OLIs)\nTotal package premium: $7,500/yr\nAll 3 PIs for RT transition → quoted\n3 RFQLIs derive → quoted\nRFQ #3401 materializes → completed',
+        states: { 'PI 16720 (RT/PL)': 'quoted', 'PI 16721 (RT/GL)': 'quoted', 'PI 16722 (RT/A&M)': 'quoted', 'PI 16723 (AW/PL)': 'waiting_for_uw', 'PI 16724 (AW/GL)': 'waiting_for_uw', 'PI 16725 (AW/A&M)': 'waiting_for_uw', 'RT Bundle': '$7,500' }
+      },
+      {
+        day: 'Day 8',
+        event: 'AmWins quotes: PL $3,000 + GL $2,500 + A&M included + bonus CYBER $1,000',
+        detail: 'Quote #105 (bundled — 3 OLIs + unsolicited cyber)\nTotal package premium: $6,500/yr (cheaper!)\nAll 3 AmWins PIs → quoted\nAmWins added Cyber coverage we didn\'t ask for — bonus',
+        states: { 'PI 16720 (RT/PL)': 'quoted', 'PI 16721 (RT/GL)': 'quoted', 'PI 16722 (RT/A&M)': 'quoted', 'PI 16723 (AW/PL)': 'quoted', 'PI 16724 (AW/GL)': 'quoted', 'PI 16725 (AW/A&M)': 'quoted', 'AW Bundle': '$6,500 + Cyber' }
+      },
+      {
+        day: 'Day 9',
+        event: 'Operator compares bundles on /placements',
+        detail: 'RT Specialty: $7,500 (PL $3.5K + GL $2.8K + A&M $1.2K)\nAmWins: $6,500 (PL $3K + GL $2.5K + A&M incl + Cyber $1K bonus)\nAmWins is $1,000 cheaper AND includes Cyber\nOperator prepares proposal with AmWins quote',
+        states: { 'RT total': '$7,500 (3 coverages)', 'AmWins total': '$6,500 (4 coverages)', 'Decision': 'AmWins — better value' }
+      },
+      {
+        day: 'Day 10',
+        event: 'Proposal sent to Sunshine Kids with AmWins quote',
+        detail: 'AmWins PIs transition → proposal_sent\nRT PIs stay at quoted (backup option)\nQuote #105 status → selected\nQuote #104 status → not_selected',
+        states: { 'PI 16723 (AW/PL)': 'proposal_sent', 'PI 16724 (AW/GL)': 'proposal_sent', 'PI 16725 (AW/A&M)': 'proposal_sent', 'PI 16720-22 (RT)': 'quoted (backup)', 'Quote #105': 'selected', 'Quote #104': 'not_selected' }
+      },
+    ]
+  },
+  {
+    name: '4. All Declined → Remarketing',
+    desc: 'Pho King Delicious (Restaurant LLC, Opp 487220) • Professional Liability • Hiscox + Coterie',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched PL ($1M/$1M) to Hiscox and Coterie',
+        detail: 'OLI 42650 (Professional Liability)\nRFQ #3501 → Hiscox (direct portal, instant_quote channel) → RFQLI #9001 → PI #17001\nRFQ #3502 → Coterie (API, coverforce_api channel) → RFQLI #9002 → PI #17002\nBoth are instant-quote channels — expect fast responses',
+        states: { 'PI #17001 (Hiscox)': 'waiting_for_uw', 'PI #17002 (Coterie)': 'waiting_for_uw', 'CI (OLI 42650)': 'placement' }
+      },
+      {
+        day: 'Day 1',
+        event: 'Hiscox portal returns: DECLINED — "loss history too severe"',
+        detail: 'Instant decline via API response\nDeclination category: loss_history\n2 claims in past 3 years totaling $45K\nPI #17001 → declined_all',
+        states: { 'PI #17001 (Hiscox)': 'declined_all', 'PI #17002 (Coterie)': 'waiting_for_uw', 'RFQLI #9001': 'declined (loss_history)' }
+      },
+      {
+        day: 'Day 3',
+        event: 'Coterie API returns: DECLINED — "class of business not in appetite"',
+        detail: 'Declination category: class_of_business\nCoterie doesn\'t write restaurants with liquor exposure\nPI #17002 → declined_all\n⚠️ ALL PIs for OLI 42650 are now declined!',
+        states: { 'PI #17001 (Hiscox)': 'declined_all', 'PI #17002 (Coterie)': 'declined_all', 'OLI 42650': 'ALL DECLINED' }
+      },
+      {
+        day: 'Day 3',
+        event: 'MegaBro shows: "All Declined — Eligible for Remarketing"',
+        detail: 'Operator reviews decline reasons on /placements:\n• Hiscox: loss_history (claims too severe)\n• Coterie: class_of_business (restaurant + liquor)\nDecision: try E&S / specialty market instead of admitted carriers',
+        states: { 'PI #17001': 'declined_all', 'PI #17002': 'declined_all', 'Operator action': 'Evaluate remarket' }
+      },
+      {
+        day: 'Day 4',
+        event: 'Operator clicks "Remarket" → new submission cycle begins',
+        detail: 'CLS Process Manager backtracks: CI placement → submission\nNew SubmissionIntent created (type: remarketing, prior_si references original)\nAgora generates new packet targeting E&S wholesalers:\nRFQ #3601 → Burns & Wilcox (brokered) → RFQLI #9101 → PI #17101\nRFQ #3602 → CRC Group (brokered) → RFQLI #9102 → PI #17102',
+        states: { 'New PI #17101 (B&W)': 'waiting_for_uw', 'New PI #17102 (CRC)': 'waiting_for_uw', 'New SI': 'submitted (remarketing)', 'CI': 'placement (round 2)' }
+      },
+    ]
+  },
+  {
+    name: '5. Operator Pause & Resume',
+    desc: 'NovaTech AI Inc (Opp 489500) • GL + Cyber • biBerk (instant quote portal)',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched GL + Cyber to biBerk via portal',
+        detail: 'OLI 43101 (General Liability, $1M/$2M)\nOLI 43102 (Cyber Liability, $1M)\nRFQ #3701 (channel: instant_quote_portal) → biBerk\nRFQLI #9201 (GL) → PI #17201\nRFQLI #9202 (Cyber) → PI #17202\nbiBerk portal submission initiated automatically',
+        states: { 'PI #17201 (GL)': 'waiting_for_uw', 'PI #17202 (Cyber)': 'waiting_for_uw', 'RFQ #3701': 'awaiting_portal_result' }
+      },
+      {
+        day: 'Day 2',
+        event: 'biBerk returns price indication: GL $3,800, Cyber $2,100',
+        detail: 'Not a formal quote yet — price_indication only\nRFQLI #9201 → price_indication ($3,800)\nRFQLI #9202 → price_indication ($2,100)\nPIs stay at waiting_for_uw (price indication ≠ formal quote)',
+        states: { 'PI #17201 (GL)': 'waiting_for_uw', 'PI #17202 (Cyber)': 'waiting_for_uw', 'RFQLI #9201': 'price_indication ($3,800)', 'RFQLI #9202': 'price_indication ($2,100)' }
+      },
+      {
+        day: 'Day 3',
+        event: 'NovaTech CEO calls: "We\'re in the middle of a Series B, pause everything for 2-3 weeks"',
+        detail: 'Operator clicks "Pause" on MegaBro /placements\nBoth PIs → on_hold\nAutomated follow-ups suppressed\nReason logged: customer_restructuring',
+        states: { 'PI #17201 (GL)': 'on_hold', 'PI #17202 (Cyber)': 'on_hold', 'Hold reason': 'Series B fundraise' }
+      },
+      {
+        day: 'Day 20',
+        event: 'NovaTech: "Series B closed! Ready to proceed"',
+        detail: 'Operator clicks "Resume" on MegaBro\nBoth PIs → waiting_for_uw\nOperator sends biBerk a status check: "Still good on those indications?"',
+        states: { 'PI #17201 (GL)': 'waiting_for_uw', 'PI #17202 (Cyber)': 'waiting_for_uw', 'RFQLI #9201': 'under_review', 'RFQLI #9202': 'under_review' }
+      },
+      {
+        day: 'Day 22',
+        event: 'biBerk confirms formal quote: GL $3,800, Cyber $2,100 ($5,900 total)',
+        detail: 'Quote #5701 (type: full_quote, bundled GL+Cyber)\nTotal package: $5,900/yr\nBoth PIs → quoted\nBoth RFQLIs derive → quoted\nRFQ #3701 materializes → completed',
+        states: { 'PI #17201 (GL)': 'quoted', 'PI #17202 (Cyber)': 'quoted', 'RFQ #3701': 'completed', 'Quote #5701': '$5,900 total' }
+      },
+      {
+        day: 'Day 24',
+        event: 'Proposal sent → NovaTech accepts → binding initiated',
+        detail: 'PIs → proposal_sent → bound\nCI auto-advances: placement → sales → binding\nBindingIntent created for each OLI\nHandoff to binding team',
+        states: { 'PI #17201 (GL)': 'bound', 'PI #17202 (Cyber)': 'bound', 'CI (GL)': 'binding', 'CI (Cyber)': 'binding' }
+      },
+    ]
+  },
+  {
+    name: '6. Instant Quote vs Brokered — Same Coverage',
+    desc: 'Greenfield Landscaping (Opp 489801) • Workers\' Comp • Pie Insurance (portal) + AmTrust via AmWins (brokered)',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched WC to 2 channels simultaneously',
+        detail: 'OLI 43200 (Workers\' Compensation, Class Code 0042 — Landscaping)\nRFQ #3801 → Pie Insurance (channel: instant_quote_portal) → RFQLI #9301 → PI #17301\nRFQ #3802 → AmWins/AmTrust (channel: brokered) → RFQLI #9302 → PI #17302\nSame coverage, different placement routes',
+        states: { 'PI #17301 (Pie)': 'waiting_for_uw', 'PI #17302 (AmWins)': 'waiting_for_uw', 'RFQ #3801': 'awaiting_portal_result', 'RFQ #3802': 'submitted' }
+      },
+      {
+        day: 'Day 0',
+        event: 'Pie Insurance portal returns instant quote: $8,200/yr',
+        detail: 'Near-instant response from portal API\nQuote #5801 (type: full_quote)\nPI #17301 → quoted within minutes\nRFQLI #9301 → quoted\nBrokered channel still waiting',
+        states: { 'PI #17301 (Pie)': 'quoted', 'PI #17302 (AmWins)': 'waiting_for_uw', 'Quote (Pie)': '$8,200 (instant)' }
+      },
+      {
+        day: 'Day 5',
+        event: 'AmWins asks for 5yr payroll breakdown by class code',
+        detail: 'Email from Mark @ AmWins: "Need payroll data split by job type"\nBlocker: customer (need data from Greenfield)\nPI #17302 stays waiting_for_uw with customer blocker',
+        states: { 'PI #17301 (Pie)': 'quoted', 'PI #17302 (AmWins)': 'waiting_for_uw', 'Blocker (AmWins)': 'customer', 'Quote (Pie)': '$8,200' }
+      },
+      {
+        day: 'Day 8',
+        event: 'Customer provides payroll data → forwarded to AmWins',
+        detail: 'Docs submitted, blocker clears\nNow waiting on AmTrust UW team',
+        states: { 'PI #17301 (Pie)': 'quoted', 'PI #17302 (AmWins)': 'waiting_for_uw', 'Blocker (AmWins)': 'uw' }
+      },
+      {
+        day: 'Day 11',
+        event: 'AmWins/AmTrust quotes WC: $6,900/yr — $1,300 cheaper than Pie',
+        detail: 'Quote #5802 (type: full_quote)\nAmTrust E-mod applied: 0.92 (favorable)\nPI #17302 → quoted\nNow 2 quotes to compare:\n• Pie Insurance: $8,200 (instant, admitted)\n• AmTrust via AmWins: $6,900 (brokered, admitted, better e-mod)',
+        states: { 'PI #17301 (Pie)': 'quoted', 'PI #17302 (AmWins)': 'quoted', 'Quote (Pie)': '$8,200', 'Quote (AmTrust)': '$6,900 ← better' }
+      },
+      {
+        day: 'Day 12',
+        event: 'Operator selects AmTrust quote, sends proposal',
+        detail: 'Quote #5802 → selected, Quote #5801 → not_selected\nPI #17302 → proposal_sent\nPI #17301 stays quoted (not selected, but not cancelled)\nTradeoff: instant quote was fast but brokered was cheaper',
+        states: { 'PI #17301 (Pie)': 'quoted', 'PI #17302 (AmWins)': 'proposal_sent', 'Quote #5802': 'selected', 'Quote #5801': 'not_selected' }
+      },
+    ]
+  },
+  {
+    name: '7. Resubmission — Wrong Packet',
+    desc: 'Apex Construction (Opp 489950) • GL • CRC Group — packet had wrong loss runs attached',
+    steps: [
+      {
+        day: 'Day 0',
+        event: 'Dispatched GL to CRC Group',
+        detail: 'OLI 43301 (General Liability, Artisan Contractor)\nRFQ #3901 → CRC Group (Lisa Chen) → RFQLI #9401 → PI #17401\nPacket generated with ACORD 125/126 + loss runs',
+        states: { 'PI #17401': 'waiting_for_uw', 'RFQLI #9401': 'pending', 'SI': 'submitted' }
+      },
+      {
+        day: 'Day 2',
+        event: 'Lisa @ CRC: "Loss runs attached are for a different entity — please resend"',
+        detail: 'Wrong loss runs! Agora pulled docs for "Apex Construction LLC" but insured is "Apex Construction Inc"\nThis is a packet error, not a carrier decline',
+        states: { 'PI #17401': 'waiting_for_uw', 'RFQLI #9401': 'info_requested', 'Problem': 'wrong docs in packet' }
+      },
+      {
+        day: 'Day 2',
+        event: 'Operator determines: need to resubmit with correct docs',
+        detail: 'This isn\'t a "send more info" situation — the entire packet was wrong\nOperator transitions PI → resubmission\nProcess Manager backtracks CI: placement → submission\nNew SubmissionIntent created (type: remarketing, reason: document_error)',
+        states: { 'PI #17401': 'resubmission', 'CI (OLI 43301)': 'submission (backtrack)', 'New SI': 'preparing' }
+      },
+      {
+        day: 'Day 3',
+        event: 'Correct loss runs linked, new packet generated',
+        detail: 'Operator fixes Aether doc link → correct loss runs for "Apex Construction Inc"\nAgora regenerates packet\nNew SI → packet_ready → submitted\nNew RFQ #3902 → CRC Group → new RFQLI #9501 → new PI #17501',
+        states: { 'New PI #17501': 'waiting_for_uw', 'New RFQLI #9501': 'pending', 'New RFQ #3902': 'submitted', 'Old PI #17401': 'resubmission (closed)' }
+      },
+      {
+        day: 'Day 7',
+        event: 'Lisa @ CRC quotes GL: $11,400/yr',
+        detail: 'Quote #5901 (type: full_quote)\nCorrect docs → successful placement this time\nPI #17501 → quoted',
+        states: { 'New PI #17501': 'quoted', 'New RFQLI #9501': 'quoted', 'Quote #5901': '$11,400' }
+      },
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// HELPER: Universal state type lookup across all machines
+// ═══════════════════════════════════════════════
+function getStateType(val) {
+  // Check all machines for a matching state
+  for (const m of Object.values(MACHINES)) {
+    if (m.stateTypes && m.stateTypes[val]) return m.stateTypes[val];
+  }
+  // Heuristic fallback for non-state values (like dollar amounts, labels, etc.)
+  if (/^\$/.test(val) || /\d/.test(val)) return 'active';
+  if (/declined|lost|cancel|failed|invalid|withdrawn|abandoned|disqualified/.test(val)) return 'terminal';
+  if (/bound|won|selected|settled|approved|complete|ready|sent|active|service/.test(val)) return 'terminal-win';
+  if (/hold|parked|remediation|expir|objection|revision|info/.test(val)) return 'parked';
+  if (/waiting|pending|preparing|collecting|draft|initiated|upcoming/.test(val)) return 'initial';
+  return 'active';
+}
+
+// ═══════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════════
+// HIERARCHY PANEL
+// ═══════════════════════════════════════════════
+function buildHierarchy() {
+  const tree = document.getElementById('hierarchy-tree');
+  ENTITIES.forEach((e, i) => {
+    const row = document.createElement('div');
+    row.className = 'entity-row';
+    let indents = '';
+    for (let d = 0; d < e.depth; d++) indents += '<div class="entity-indent"></div>';
+    if (e.depth > 0) indents += '<div class="entity-connector">└─</div>';
+
+    row.innerHTML = `
+      ${indents}
+      <div class="entity-box ${e.highlight ? 'selected' : ''}" data-idx="${i}">
+        <div>
+          <span class="entity-name">${e.name}</span>
+          ${e.cardinality ? `<span class="entity-cardinality">(${e.cardinality})</span>` : ''}
+        </div>
+        <div class="entity-desc">${e.desc}</div>
+      </div>
+    `;
+    tree.appendChild(row);
+  });
+
+  tree.addEventListener('click', (ev) => {
+    const box = ev.target.closest('.entity-box');
+    if (!box) return;
+    const idx = parseInt(box.dataset.idx);
+    const e = ENTITIES[idx];
+    tree.querySelectorAll('.entity-box').forEach(b => b.classList.remove('selected'));
+    box.classList.add('selected');
+
+    const detail = document.getElementById('hierarchy-detail');
+    detail.style.display = 'block';
+
+    // Color map for status value types
+    const typeColors = {
+      'initial': 'var(--accent)',
+      'active': 'var(--text)',
+      'parked': 'var(--yellow)',
+      'terminal': 'var(--red)',
+      'terminal-win': 'var(--green)',
+    };
+
+    // Build status sections
+    let statusHTML = '';
+    if (e.statuses && e.statuses.length > 0) {
+      statusHTML = `<div class="status-section">`;
+      for (const s of e.statuses) {
+        statusHTML += `
+          <div class="status-field-header">
+            <span class="status-field-name">${s.field}</span>
+            <span class="status-kind-badge ${s.kind}">${s.kind}</span>
+            ${s.machine ? `<span style="font-size:10px; color:var(--text-dim);">${s.machine}</span>` : ''}
+          </div>
+        `;
+        if (s.note) statusHTML += `<div class="status-note">${s.note}</div>`;
+        if (s.derivedFrom) statusHTML += `<div class="status-derived-from">← ${s.derivedFrom}</div>`;
+
+        for (const v of s.values) {
+          const color = typeColors[v.type] || 'var(--text)';
+          const dotColor = v.type === 'initial' ? 'var(--accent)' :
+                           v.type === 'terminal-win' ? 'var(--green)' :
+                           v.type === 'terminal' ? 'var(--red)' :
+                           v.type === 'parked' ? 'var(--yellow)' : 'var(--text-dim)';
+          statusHTML += `
+            <div class="status-val-row">
+              <span class="status-val-name" style="color:${color};">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${dotColor}; margin-right:6px;"></span>
+                ${v.val}
+              </span>
+              <span class="status-val-note">${v.note}</span>
+            </div>
+          `;
+        }
+      }
+      statusHTML += `</div>`;
+    }
+
+    detail.innerHTML = `
+      <h4>${e.name}</h4>
+      <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">${e.desc}</p>
+      ${e.cardinality ? `<div style="font-size:11px; color:var(--text-dim); margin-bottom:8px;">Cardinality: <strong>${e.cardinality}</strong></div>` : ''}
+      <div style="font-size:12px; margin-bottom:4px;">
+        <strong style="color:var(--text-dim); font-size:11px;">DB Fields:</strong>
+        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">
+          ${e.fields.map(f => `<span style="padding:2px 8px; background:var(--surface2); border:1px solid var(--border); border-radius:3px; font-size:11px;">${f}</span>`).join('')}
+        </div>
+      </div>
+      ${statusHTML}
+    `;
+  });
+}
+buildHierarchy();
+
+// ═══════════════════════════════════════════════
+// PI STATE MACHINE SVG
+// ═══════════════════════════════════════════════
+const PI = MACHINES.PlacementIntent;
+const PI_POSITIONS = {
+  'waiting_for_uw': { x: 350, y: 60 },
+  'quoted':         { x: 350, y: 180 },
+  'proposal_sent':  { x: 350, y: 300 },
+  'on_hold':        { x: 100, y: 180 },
+  'bound':          { x: 350, y: 440 },
+  'declined_all':   { x: 580, y: 60 },
+  'resubmission':   { x: 580, y: 180 },
+  'remarketing':    { x: 580, y: 300 },
+  'cancelled':      { x: 100, y: 440 }
+};
+
+const STATE_COLORS = {
+  'initial': { fill: '#1e3a5f', stroke: '#6c8cff', text: '#6c8cff' },
+  'active': { fill: '#1a3328', stroke: '#4ade80', text: '#4ade80' },
+  'parked': { fill: '#2d2415', stroke: '#fbbf24', text: '#fbbf24' },
+  'terminal': { fill: '#2d1515', stroke: '#f87171', text: '#f87171' },
+  'terminal-win': { fill: '#1a3328', stroke: '#4ade80', text: '#4ade80' }
+};
+
+function buildPISVG() {
+  const svg = document.getElementById('pi-svg');
+  let html = '';
+
+  // Draw transition arrows first (behind nodes)
+  const allTransitions = [];
+  for (const [from, targets] of Object.entries(PI.transitions)) {
+    for (const to of targets) {
+      allTransitions.push({ from, to });
+    }
+  }
+
+  allTransitions.forEach(({ from, to }) => {
+    const fp = PI_POSITIONS[from];
+    const tp = PI_POSITIONS[to];
+    if (!fp || !tp) return;
+
+    const dx = tp.x - fp.x;
+    const dy = tp.y - fp.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const nx = dx / len;
+    const ny = dy / len;
+
+    const sx = fp.x + nx * 45;
+    const sy = fp.y + ny * 22;
+    const ex = tp.x - nx * 45;
+    const ey = tp.y - ny * 22;
+
+    // Curve the line slightly
+    const mx = (sx + ex) / 2 - ny * 20;
+    const my = (sy + ey) / 2 + nx * 20;
+
+    html += `<g class="transition-arrow" data-from="${from}" data-to="${to}">
+      <path d="M${sx},${sy} Q${mx},${my} ${ex},${ey}" fill="none" stroke="#4a5068" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+    </g>`;
+  });
+
+  // Arrowhead marker
+  html = `<defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#6c8cff"/>
+    </marker>
+  </defs>` + html;
+
+  // Draw state nodes
+  for (const [state, pos] of Object.entries(PI_POSITIONS)) {
+    const type = PI.stateTypes[state];
+    const colors = STATE_COLORS[type];
+    const isTerminal = PI.terminals.includes(state);
+    const w = 80;
+    const h = 18;
+
+    html += `<g class="state-node" data-state="${state}" transform="translate(${pos.x}, ${pos.y})">
+      <rect x="${-w}" y="${-h}" width="${w*2}" height="${h*2}" rx="8"
+        fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="2"
+        ${isTerminal ? 'stroke-dasharray="4,2"' : ''}/>
+      <text text-anchor="middle" dy="5" fill="${colors.text}" font-size="12" font-family="inherit" font-weight="600">${state}</text>
+    </g>`;
+  }
+
+  svg.innerHTML = html;
+
+  // Click handlers
+  svg.querySelectorAll('.state-node').forEach(node => {
+    node.addEventListener('click', () => selectPIState(node.dataset.state));
+  });
+
+  // Build rules table
+  const tbody = document.getElementById('pi-rules-body');
+  PI_TRIGGERS.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.from}</td><td>${r.to}</td><td style="color:var(--text-dim)">${r.trigger}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function selectPIState(state) {
+  const svg = document.getElementById('pi-svg');
+  svg.querySelectorAll('.state-node').forEach(n => n.classList.remove('active'));
+  svg.querySelectorAll('.transition-arrow').forEach(a => a.classList.remove('highlighted'));
+
+  const node = svg.querySelector(`.state-node[data-state="${state}"]`);
+  if (node) node.classList.add('active');
+
+  // Highlight outgoing transitions
+  const targets = PI.transitions[state] || [];
+  targets.forEach(to => {
+    const arrow = svg.querySelector(`.transition-arrow[data-from="${state}"][data-to="${to}"]`);
+    if (arrow) arrow.classList.add('highlighted');
+  });
+
+  // Highlight incoming transitions
+  for (const [from, tos] of Object.entries(PI.transitions)) {
+    if (tos.includes(state)) {
+      const arrow = svg.querySelector(`.transition-arrow[data-from="${from}"][data-to="${state}"]`);
+      if (arrow) arrow.classList.add('highlighted');
+    }
+  }
+
+  // Update sidebar
+  const type = PI.stateTypes[state];
+  const outcome = PI.outcomes[state] || '—';
+  const outgoing = PI.transitions[state] || [];
+  const incoming = [];
+  for (const [from, tos] of Object.entries(PI.transitions)) {
+    if (tos.includes(state)) incoming.push(from);
+  }
+
+  // Get operational definition
+  const piDef = PI.stateDefinitions ? PI.stateDefinitions[state] : null;
+
+  document.getElementById('pi-state-info').innerHTML = `
+    <h4>${state}</h4>
+    ${piDef ? `<p style="font-size:12px; color:var(--text-dim); margin:8px 0; line-height:1.5;">${piDef.def}</p>` : ''}
+    ${piDef && piDef.src ? `<div style="font-size:10px; color:var(--text-dim); font-style:italic; margin-bottom:8px;">[${piDef.src}]</div>` : ''}
+    <div class="field"><span class="key">Type</span><span class="badge ${type}">${type}</span></div>
+    <div class="field"><span class="key">Outcome</span><span class="val">${outcome}</span></div>
+    <div class="field"><span class="key">Terminal?</span><span class="val">${PI.terminals.includes(state) ? 'Yes' : 'No'}</span></div>
+    ${piDef && piDef.who ? `<div style="margin-top:8px; font-size:11px;"><span style="color:var(--cyan); font-weight:600;">Who transitions:</span> <span style="color:var(--text-dim);">${piDef.who}</span></div>` : ''}
+    ${piDef && piDef.note ? `<div style="margin-top:4px; font-size:11px;"><span style="color:var(--orange); font-weight:600;">Note:</span> <span style="color:var(--text-dim);">${piDef.note}</span></div>` : ''}
+    ${piDef && piDef.blocker ? `<div style="margin-top:4px; font-size:11px;"><span style="color:var(--purple); font-weight:600;">Blocker:</span> <span style="color:var(--text-dim);">${piDef.blocker}</span></div>` : ''}
+    <div style="margin-top:12px;">
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Can transition TO:</div>
+      ${outgoing.length ? outgoing.map(t => `<span class="badge ${PI.stateTypes[t]}" style="margin:2px;">${t}</span>`).join('') : '<span style="font-size:11px; color:var(--text-dim);">None (terminal)</span>'}
+    </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">Can transition FROM:</div>
+      ${incoming.length ? incoming.map(f => `<span class="badge ${PI.stateTypes[f]}" style="margin:2px;">${f}</span>`).join('') : '<span style="font-size:11px; color:var(--text-dim);">None</span>'}
+    </div>
+  `;
+}
+
+buildPISVG();
+
+// ═══════════════════════════════════════════════
+// SCENARIO PLAYER
+// ═══════════════════════════════════════════════
+let currentScenario = null;
+let currentStep = -1;
+
+function buildScenarioButtons() {
+  const container = document.getElementById('scenario-buttons');
+  SCENARIOS.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'scenario-btn';
+    btn.textContent = s.name;
+    btn.title = s.desc;
+    btn.addEventListener('click', () => loadScenario(i));
+    container.appendChild(btn);
+  });
+}
+
+function loadScenario(idx) {
+  currentScenario = idx;
+  currentStep = -1;
+  const s = SCENARIOS[idx];
+
+  // Update buttons
+  document.querySelectorAll('.scenario-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === idx);
+  });
+
+  // Build timeline
+  const timeline = document.getElementById('scenario-timeline');
+  timeline.innerHTML = `<div style="margin-bottom:16px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+    <div style="font-size:13px; font-weight:600; color:var(--accent);">${s.name}</div>
+    <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">${s.desc}</div>
+  </div>`;
+  s.steps.forEach((step, i) => {
+    const div = document.createElement('div');
+    div.className = 'timeline-step';
+    div.dataset.idx = i;
+    div.innerHTML = `
+      <div class="timeline-day">${step.day}</div>
+      <div class="timeline-content">
+        <div class="timeline-event">${step.event}</div>
+        <div class="timeline-detail">${step.detail.replace(/\n/g, '<br>')}</div>
+        <div class="timeline-state">
+          ${Object.entries(step.states).map(([k, v]) => {
+            const type = getStateType(v);
+            return `<span class="badge ${type}" style="margin:2px;">${k}: ${v}</span>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    timeline.appendChild(div);
+  });
+
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next').disabled = false;
+  updateScenarioState();
+  advanceScenario();
+}
+
+function advanceScenario() {
+  if (currentScenario === null) return;
+  const s = SCENARIOS[currentScenario];
+  if (currentStep >= s.steps.length - 1) return;
+  currentStep++;
+  updateScenarioDisplay();
+}
+
+function rewindScenario() {
+  if (currentStep <= 0) return;
+  currentStep--;
+  updateScenarioDisplay();
+}
+
+function resetScenario() {
+  if (currentScenario !== null) loadScenario(currentScenario);
+}
+
+function updateScenarioDisplay() {
+  const s = SCENARIOS[currentScenario];
+  document.querySelectorAll('.timeline-step').forEach((el, i) => {
+    el.classList.toggle('visible', i < currentStep);
+    el.classList.toggle('current', i === currentStep);
+  });
+  document.getElementById('btn-prev').disabled = currentStep <= 0;
+  document.getElementById('btn-next').disabled = currentStep >= s.steps.length - 1;
+  updateScenarioState();
+}
+
+function updateScenarioState() {
+  const body = document.getElementById('scenario-state-body');
+  if (currentScenario === null || currentStep < 0) {
+    body.innerHTML = 'Select a scenario to begin.';
+    return;
+  }
+  const step = SCENARIOS[currentScenario].steps[currentStep];
+  body.innerHTML = Object.entries(step.states).map(([k, v]) => {
+    const type = getStateType(v);
+    return `<div class="field"><span class="key">${k}</span><span class="badge ${type}">${v}</span></div>`;
+  }).join('');
+}
+
+buildScenarioButtons();
+document.getElementById('btn-next').addEventListener('click', advanceScenario);
+document.getElementById('btn-prev').addEventListener('click', rewindScenario);
+document.getElementById('btn-reset').addEventListener('click', resetScenario);
+
+// ═══════════════════════════════════════════════
+// MATERIALIZATION PANEL
+// ═══════════════════════════════════════════════
+function buildMaterialization() {
+  const flow = document.getElementById('mat-flow');
+  const piStates = Object.keys(PI.stateTypes);
+
+  // PI Level
+  flow.innerHTML = `
+    <div style="font-size:13px; font-weight:600; color:var(--purple); margin-bottom:8px;">Click a PlacementIntent state:</div>
+    <div class="mat-level">
+      <div class="mat-label" style="color:var(--purple);">PlacementIntent</div>
+      <div class="mat-boxes">
+        ${piStates.map(s => `<div class="mat-box" data-pi="${s}" style="cursor:pointer; border-left:3px solid var(--purple);">${s}</div>`).join('')}
+      </div>
+    </div>
+    <div class="mat-arrow">↓ derives</div>
+    <div class="mat-level">
+      <div class="mat-label" style="color:var(--cyan);">RFQLI Status</div>
+      <div class="mat-boxes" id="mat-rfqli"></div>
+    </div>
+    <div class="mat-arrow">↓ aggregates</div>
+    <div class="mat-level">
+      <div class="mat-label" style="color:var(--accent);">RFQ Status</div>
+      <div class="mat-boxes" id="mat-rfq"></div>
+    </div>
+    <div class="mat-arrow">↓ informs</div>
+    <div class="mat-level">
+      <div class="mat-label" style="color:var(--green);">CoverageIntent</div>
+      <div class="mat-boxes" id="mat-ci"></div>
+    </div>
+    <div class="mat-arrow">↓ aggregates</div>
+    <div class="mat-level">
+      <div class="mat-label" style="color:var(--orange);">Opportunity</div>
+      <div class="mat-boxes" id="mat-opp"></div>
+    </div>
+  `;
+
+  // PI → RFQLI mapping
+  const piToRfqli = {
+    'waiting_for_uw': 'pending / under_review',
+    'quoted': 'quoted',
+    'proposal_sent': 'quoted',
+    'on_hold': 'info_requested',
+    'bound': 'quoted',
+    'declined_all': 'declined',
+    'resubmission': 'withdrawn',
+    'remarketing': 'withdrawn',
+    'cancelled': 'withdrawn'
+  };
+
+  const rfqliToRfq = {
+    'pending / under_review': 'awaiting_quote',
+    'quoted': 'completed (if all terminal)',
+    'info_requested': 'triaging',
+    'declined': 'completed (if all terminal)',
+    'withdrawn': 'withdrawn (if all withdrawn)'
+  };
+
+  const piToCi = {
+    'waiting_for_uw': 'placement',
+    'quoted': 'placement',
+    'proposal_sent': 'placement',
+    'on_hold': 'placement',
+    'bound': 'sales → binding → service',
+    'declined_all': 'placement (outcome: lost)',
+    'resubmission': 'submission (backtrack)',
+    'remarketing': 'submission (backtrack)',
+    'cancelled': 'cancelled'
+  };
+
+  const ciToOpp = {
+    'placement': 'in_progress',
+    'sales → binding → service': 'won (if all CIs done)',
+    'placement (outcome: lost)': 'lost (if all CIs lost)',
+    'submission (backtrack)': 'in_progress',
+    'cancelled': 'lost / cancelled'
+  };
+
+  flow.querySelectorAll('[data-pi]').forEach(box => {
+    box.addEventListener('click', () => {
+      flow.querySelectorAll('.mat-box').forEach(b => b.classList.remove('highlight'));
+      box.classList.add('highlight');
+
+      const piState = box.dataset.pi;
+      const rfqli = piToRfqli[piState] || '?';
+      const rfq = rfqliToRfq[rfqli] || '?';
+      const ci = piToCi[piState] || '?';
+      const opp = ciToOpp[ci] || '?';
+
+      document.getElementById('mat-rfqli').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--cyan);">${rfqli}</div>`;
+      document.getElementById('mat-rfq').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--accent);">${rfq}</div>`;
+      document.getElementById('mat-ci').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--green);">${ci}</div>`;
+      document.getElementById('mat-opp').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--orange);">${opp}</div>`;
+    });
+  });
+}
+buildMaterialization();
+
+// ═══════════════════════════════════════════════
+// ALL MACHINES PANEL
+// ═══════════════════════════════════════════════
+function buildAllMachines() {
+  const grid = document.getElementById('machines-grid');
+  for (const [name, m] of Object.entries(MACHINES)) {
+    const allStates = new Set();
+    if (m.initial) allStates.add(m.initial);
+    m.terminals.forEach(t => allStates.add(t));
+    for (const [from, tos] of Object.entries(m.transitions)) {
+      allStates.add(from);
+      tos.forEach(t => allStates.add(t));
+    }
+
+    const card = document.createElement('div');
+    card.className = 'machine-card';
+
+    // Build state definitions list
+    let defsHTML = '';
+    if (m.stateDefinitions) {
+      defsHTML = `<div class="state-defs" style="display:none; margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+        <div style="font-size:10px; color:var(--yellow); margin-bottom:8px; font-style:italic;">⚠ Operational definitions — not official. See disclaimer.</div>
+        ${[...allStates].map(s => {
+          const d = m.stateDefinitions[s];
+          if (!d) return '';
+          const type = m.stateTypes[s] || 'active';
+          const typeColors = { 'initial':'var(--accent)', 'active':'var(--text)', 'parked':'var(--yellow)', 'terminal':'var(--red)', 'terminal-win':'var(--green)' };
+          const color = typeColors[type] || 'var(--text)';
+          return `<div style="margin-bottom:10px;">
+            <div style="font-weight:600; font-size:12px; color:${color};">${s} <span style="font-size:10px; color:var(--text-dim); font-weight:400;">[${d.src || 'interpreted'}]</span></div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px; line-height:1.5;">${d.def}</div>
+            ${d.who ? `<div style="font-size:10px; color:var(--cyan); margin-top:2px;">Who: ${d.who}</div>` : ''}
+            ${d.note ? `<div style="font-size:10px; color:var(--orange); margin-top:2px;">Note: ${d.note}</div>` : ''}
+            ${d.sla ? `<div style="font-size:10px; color:var(--purple); margin-top:2px;">SLA: ${d.sla}</div>` : ''}
+            ${d.outcome ? `<div style="font-size:10px; color:var(--green); margin-top:2px;">Outcome: ${d.outcome}</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    card.innerHTML = `
+      <h4>${name}</h4>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:8px;">${m.description}</p>
+      <div class="states">
+        ${[...allStates].map(s => {
+          let cls = '';
+          if (s === m.initial) cls = 'is-initial';
+          else if (m.terminals.includes(s)) cls = 'is-terminal';
+          return `<span class="state-tag ${cls}">${s}</span>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text-dim);">
+        ${Object.entries(m.transitions).length} transition rules · ${[...allStates].size} states · ${m.terminals.length} terminal
+        ${m.stateDefinitions ? ' · <a href="#" class="toggle-defs" style="color:var(--accent); text-decoration:none;">show definitions ▼</a>' : ''}
+      </div>
+      ${defsHTML}
+    `;
+
+    // Toggle definitions
+    card.addEventListener('click', (ev) => {
+      const link = ev.target.closest('.toggle-defs');
+      if (!link) return;
+      ev.preventDefault();
+      const defs = card.querySelector('.state-defs');
+      if (defs) {
+        const visible = defs.style.display !== 'none';
+        defs.style.display = visible ? 'none' : 'block';
+        link.textContent = visible ? 'show definitions ▼' : 'hide definitions ▲';
+      }
+    });
+
+    grid.appendChild(card);
+  }
+}
+buildAllMachines();
+
+// ═══════════════════════════════════════════════
+// EMAIL CLASSIFICATIONS (Zephyrus / Hermes)
+// ═══════════════════════════════════════════════
+const EMAIL_CLASSIFICATIONS = [
+  {
+    category: 'INSURANCE_QUOTE',
+    emoji: '💰',
+    lifecycle: 'comms.quote',
+    priority: true,
+    excluded: false,
+    placementRelevant: true,
+    def: 'Carrier/UW sent a formal insurance quote with premium, limits, and terms. This is THE signal that triggers quote extraction and PI state transitions.',
+    downstream: [
+      'Triggers quote extraction pipeline (Hermes → Aether)',
+      'Quote entity created in CLS (status: pending_validation)',
+      'Future: placement.quote_received signal → MiniOrc → PI waiting_for_uw → quoted',
+      'Slack notification with 💰 emoji to company channel',
+    ],
+    piTransition: 'waiting_for_uw → quoted',
+    rfqliTransition: 'under_review → quoted',
+    source: 'from code — relay_routing.py + sync_email_silver.py line 677',
+  },
+  {
+    category: 'INSURANCE_DECLINE',
+    emoji: '🚫',
+    lifecycle: 'comms.quote',
+    priority: false,
+    excluded: false,
+    placementRelevant: true,
+    def: 'Carrier/UW declined to quote this coverage. The email contains a declination with reason (appetite, class of business, loss history, state restriction, etc.).',
+    downstream: [
+      'Future: placement.quote_declined signal → MiniOrc → PI waiting_for_uw → declined_all',
+      'Declination category parsed from email content',
+      'Slack notification with 🚫 emoji to company channel',
+      'If ALL PIs for OLI are declined → remarketing eligible',
+    ],
+    piTransition: 'waiting_for_uw → declined_all',
+    rfqliTransition: 'under_review → declined',
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'QUOTE_REJECTED',
+    emoji: '🚫',
+    lifecycle: 'comms.quote',
+    priority: false,
+    excluded: false,
+    placementRelevant: true,
+    def: 'A previously sent quote was rejected — either by the customer (price/terms unacceptable) or by internal review (invalid extraction, expired). Different from DECLINE (carrier says no) — this is about a quote that existed but was rejected.',
+    downstream: [
+      'Quote entity → not_selected or invalid',
+      'May trigger remarketing if no other viable quotes',
+    ],
+    piTransition: 'quoted → remarketing (if no alternatives)',
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'SUBMISSION',
+    emoji: '📋',
+    lifecycle: 'comms.placement',
+    priority: true,
+    excluded: false,
+    placementRelevant: true,
+    def: 'Submission-related email — either acknowledgment of receipt from carrier, status update on a pending submission, or internal submission activity. Covers the submission→placement boundary.',
+    downstream: [
+      'Routed to comms.placement lifecycle message',
+      'Slack notification with 📋 to company channel',
+      'Confirms carrier received the packet (no PI transition yet — just tracking)',
+    ],
+    piTransition: null,
+    rfqliTransition: 'pending → under_review (acknowledgment)',
+    source: 'from code — relay_routing.py + notification_service.py',
+  },
+  {
+    category: 'SUBMISSION_TO_QUOTE',
+    emoji: '📋',
+    lifecycle: 'comms.placement',
+    priority: false,
+    excluded: false,
+    placementRelevant: true,
+    def: 'Mid-funnel email bridging submission and quoting — e.g., UW asking for more info, requesting loss runs, sending a price indication. The placement is active but not yet at a terminal state.',
+    downstream: [
+      'Routed to comms.placement',
+      'Future: placement.info_requested signal (if UW asks for docs)',
+      'Future: placement.docs_submitted signal (if we forward docs)',
+      'Tracks the "waiting_for_uw" phase activity',
+    ],
+    piTransition: 'waiting_for_uw (stays, but tracks blocker context)',
+    rfqliTransition: 'under_review ↔ info_requested',
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'UNDERWRITER_RESPONSE',
+    emoji: '🔍',
+    lifecycle: null,
+    priority: true,
+    excluded: false,
+    placementRelevant: true,
+    def: 'Generic UW response that doesn\'t fit a more specific category (quote, decline, submission). Could be questions, requests for clarification, general status updates, or informal price indications.',
+    downstream: [
+      'High-priority Slack notification with 🔍',
+      'No specific lifecycle routing (falls through to comms.email)',
+      'Operator reviews and determines if action needed',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py PRIORITY_CATEGORIES',
+  },
+  {
+    category: 'CUSTOMER_FOLLOW_UP',
+    emoji: '📞',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Customer-initiated follow-up — the insured is asking about their application status, requesting updates, or providing additional documents. Not a carrier communication.',
+    downstream: [
+      'Slack notification with 📞 to company channel',
+      'May require operator response (status update email)',
+      'No direct PI/RFQLI transition',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py NOTIFICATION_CATEGORIES',
+  },
+  {
+    category: 'FOLLOW UP',
+    emoji: '📞',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Generic follow-up communication — could be from carrier, customer, or internal. Catch-all for follow-up emails that don\'t fit a more specific category.',
+    downstream: [
+      'Slack notification with 📞',
+      'Operator review for potential action',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py NOTIFICATION_CATEGORIES',
+  },
+  {
+    category: 'SUBJECTIVITY',
+    emoji: '📊',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Communication about subjectivities — conditions that must be met before binding. Loss control reports, signed apps, financial statements, etc. Relevant to the binding phase, not placement.',
+    downstream: [
+      'Slack notification with 📊',
+      'Relevant to BindingIntent (collecting_subjectivities state)',
+      'No PI transition (this is post-quote)',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py emoji mapping',
+  },
+  {
+    category: 'INSURANCE_BINDER',
+    emoji: '📎',
+    lifecycle: 'comms.service',
+    priority: true,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Binder document received from carrier — official confirmation that coverage is in force. This is the binding confirmation, not the quote acceptance.',
+    downstream: [
+      'Routed to comms.service',
+      'High-priority Slack notification with 📎',
+      'Relevant to BindingIntent: awaiting_binder → bound',
+      'Process Manager: CI → service, outcome = won',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py + notification_service.py',
+  },
+  {
+    category: 'INSURANCE_POLICY',
+    emoji: '📜',
+    lifecycle: 'comms.service',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Policy document received — the full policy (not binder). Could be new issuance, renewal, or endorsement. Post-binding documentation.',
+    downstream: [
+      'Routed to comms.service',
+      'Slack notification with 📜',
+      'Policy document linked in Aether',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'POLICY_CANCELLATION',
+    emoji: '❌',
+    lifecycle: 'comms.service',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Policy cancellation notice — carrier or customer initiated. Triggers retention workflow if mid-term.',
+    downstream: [
+      'Routed to comms.service',
+      'Slack notification with ❌',
+      'May trigger RenewalIntent (retention_triggered state)',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'POLICY_ENDORSEMENT',
+    emoji: '➕',
+    lifecycle: 'comms.service',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Policy endorsement communication — adding/removing coverage, changing limits, adding insureds, etc. A modification to an existing policy.',
+    downstream: [
+      'Routed to comms.service',
+      'Slack notification with ➕',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py + notification_service.py',
+  },
+  {
+    category: 'POLICY_REINSTATEMENT',
+    emoji: '🔄',
+    lifecycle: 'comms.service',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Reinstatement of a previously cancelled policy — carrier agreed to restore coverage. Often after payment catch-up or dispute resolution.',
+    downstream: [
+      'Routed to comms.service',
+      'Slack notification with 🔄',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'DOCU_SIGN',
+    emoji: '✍️',
+    lifecycle: 'comms.service',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'DocuSign workflow email — signature requests, completions, or reminders. Part of the binding flow (BindingIntent: awaiting_signatures).',
+    downstream: [
+      'Routed to comms.service',
+      'Relevant to BindingIntent signature flow',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'SERVICE_REQUEST',
+    emoji: '🛠️',
+    lifecycle: 'comms.service',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'General service request on an active policy — certificate requests, audit inquiries, claim questions, billing issues.',
+    downstream: [
+      'Routed to comms.service',
+      'Slack notification with 🛠️',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'FINANCING/PAYMENT',
+    emoji: '💳',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Premium financing or payment-related email — PFA quotes, lender communications, payment confirmations, financing approvals.',
+    downstream: [
+      'Slack notification with 💳',
+      'Relevant to Payment and FinancingAgreement machines',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py emoji mapping',
+  },
+  {
+    category: 'INVOICE',
+    emoji: '🧾',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Invoice communication — billing statements, premium invoices, commission statements.',
+    downstream: [
+      'Slack notification with 🧾',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py emoji mapping',
+  },
+  {
+    category: 'CORRECTION',
+    emoji: '✏️',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'Correction to a previous communication — amended quote, corrected policy, revised terms.',
+    downstream: [
+      'Slack notification with ✏️',
+      'May require re-processing of the corrected item',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py emoji mapping',
+  },
+  {
+    category: 'NEW_CUSTOMER',
+    emoji: '🆕',
+    lifecycle: 'comms.growth',
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'New customer inquiry or lead — someone reaching out about getting insurance for the first time through Harper.',
+    downstream: [
+      'Routed to comms.growth',
+      'New opportunity intake flow',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — relay_routing.py STRONG_EMAIL_ROUTES',
+  },
+  {
+    category: 'GENERAL_INQUIRY',
+    emoji: '❓',
+    lifecycle: null,
+    priority: false,
+    excluded: false,
+    placementRelevant: false,
+    def: 'General inquiry that doesn\'t fit any specific category. Could be about Harper\'s services, general questions, or unclassifiable inbound.',
+    downstream: [
+      'Slack notification with ❓',
+      'Operator triage',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — notification_service.py emoji mapping',
+  },
+  {
+    category: 'ROUTINE/MISCELLANEOUS',
+    emoji: '📝',
+    lifecycle: null,
+    priority: false,
+    excluded: true,
+    placementRelevant: false,
+    def: 'Routine or miscellaneous email with no operational value — auto-replies, OOO messages, marketing, newsletters. Excluded from notifications.',
+    downstream: [
+      'NO Slack notification (excluded category)',
+      'NO lifecycle routing',
+      'Stored in Silver for audit but not acted upon',
+    ],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — sync_email_silver.py EXCLUDED_NOTIFICATION_CATEGORIES',
+  },
+  {
+    category: 'MISCELLANEOUS',
+    emoji: '📝',
+    lifecycle: null,
+    priority: false,
+    excluded: true,
+    placementRelevant: false,
+    def: 'Catch-all miscellaneous. Excluded from notifications. Alias for ROUTINE/MISCELLANEOUS.',
+    downstream: ['NO notification, NO routing — stored only'],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — EXCLUDED_NOTIFICATION_CATEGORIES',
+  },
+  {
+    category: 'OTHERS',
+    emoji: '📌',
+    lifecycle: null,
+    priority: false,
+    excluded: true,
+    placementRelevant: false,
+    def: 'Unclassifiable email. Hermes couldn\'t determine a category. Excluded from notifications.',
+    downstream: ['NO notification, NO routing — stored only'],
+    piTransition: null,
+    rfqliTransition: null,
+    source: 'from code — EXCLUDED_NOTIFICATION_CATEGORIES',
+  },
+];
+
+const PIPELINE_STAGES = [
+  { name: 'Bronze Sync', desc: 'Gmail API → bronze table (raw emails)', color: 'var(--text-dim)' },
+  { name: 'Filter', desc: 'Exclude ~40 domains, promo labels, calendar invites', color: 'var(--text-dim)' },
+  { name: 'Silver Upsert', desc: 'Direction, thread position, dedup by gmail_message_id', color: 'var(--text-dim)' },
+  { name: 'Parse Content', desc: 'HTML → Markdown via MarkItDown', color: 'var(--accent)' },
+  { name: 'Upload Attachments', desc: 'Attachments → Aether (artifact_id)', color: 'var(--accent)' },
+  { name: 'Classify (Hermes)', desc: 'LLM classification → category + subcategory + tags', color: 'var(--yellow)' },
+  { name: 'Summarize Thread', desc: 'Thread context summarization via Hermes', color: 'var(--accent)' },
+  { name: 'Match Company', desc: 'Hermes + OpenSearch → matched_company_id', color: 'var(--accent)' },
+  { name: 'Match UW Team', desc: 'DB lookup for UW role → uw_team', color: 'var(--accent)' },
+  { name: 'Extract Quotes', desc: 'If INSURANCE_QUOTE + inbound → Hermes quote extraction', color: 'var(--green)' },
+  { name: 'Match Opportunity', desc: 'Hermes → matched_opportunity_id + OLI details', color: 'var(--green)' },
+  { name: 'Relay Emit', desc: 'comms.email + lifecycle message via Relay SDK', color: 'var(--purple)' },
+  { name: 'Slack Notify', desc: 'BlockKit notification to company channel', color: 'var(--orange)' },
+];
+
+function buildEmailClassifications() {
+  const grid = document.getElementById('email-class-grid');
+
+  EMAIL_CLASSIFICATIONS.forEach((c, i) => {
+    const card = document.createElement('div');
+    let borderColor = 'var(--border)';
+    if (c.placementRelevant) borderColor = 'var(--accent)';
+    else if (c.excluded) borderColor = 'var(--red)';
+    else if (c.priority) borderColor = 'var(--yellow)';
+
+    card.style.cssText = `
+      padding:10px 14px; border-radius:6px; cursor:pointer; transition:all 0.15s;
+      border:1px solid ${borderColor}; background:var(--surface);
+      ${c.placementRelevant ? 'border-left:3px solid var(--accent);' : ''}
+      ${c.excluded ? 'opacity:0.5;' : ''}
+    `;
+    card.innerHTML = `
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:16px;">${c.emoji}</span>
+        <span style="font-size:12px; font-weight:600;">${c.category}</span>
+      </div>
+      <div style="font-size:10px; color:var(--text-dim); margin-top:4px;">
+        ${c.lifecycle ? `→ <code style="color:var(--cyan);">${c.lifecycle}</code>` : '<span style="color:var(--text-dim);">no routing</span>'}
+        ${c.priority ? ' · <span style="color:var(--yellow);">HIGH</span>' : ''}
+        ${c.excluded ? ' · <span style="color:var(--red);">EXCLUDED</span>' : ''}
+      </div>
+    `;
+    card.addEventListener('mouseenter', () => { card.style.borderColor = 'var(--accent)'; card.style.background = 'var(--surface2)'; });
+    card.addEventListener('mouseleave', () => { card.style.borderColor = borderColor; card.style.background = 'var(--surface)'; });
+    card.addEventListener('click', () => selectEmailClass(i));
+    grid.appendChild(card);
+  });
+
+  // Build pipeline diagram
+  const stages = document.getElementById('pipeline-stages');
+  PIPELINE_STAGES.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.style.cssText = `padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); font-size:11px; min-width:100px; text-align:center;`;
+    el.innerHTML = `<div style="font-weight:600; color:${s.color};">${s.name}</div><div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${s.desc}</div>`;
+    stages.appendChild(el);
+    if (i < PIPELINE_STAGES.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.style.cssText = 'color:var(--text-dim); font-size:14px;';
+      arrow.textContent = '→';
+      stages.appendChild(arrow);
+    }
+  });
+}
+
+function selectEmailClass(idx) {
+  const c = EMAIL_CLASSIFICATIONS[idx];
+  const detail = document.getElementById('email-class-detail');
+
+  detail.innerHTML = `
+    <h4>${c.emoji} ${c.category}</h4>
+    <p style="font-size:12px; color:var(--text-dim); margin:8px 0; line-height:1.5;">${c.def}</p>
+    <div style="font-size:10px; color:var(--text-dim); font-style:italic; margin-bottom:12px;">[${c.source}]</div>
+
+    <div class="field"><span class="key">Lifecycle Route</span><span class="val" style="color:var(--cyan);">${c.lifecycle || 'none (comms.email only)'}</span></div>
+    <div class="field"><span class="key">Priority</span><span class="val">${c.priority ? '<span style="color:var(--yellow);">HIGH</span>' : 'normal'}</span></div>
+    <div class="field"><span class="key">Notifications</span><span class="val">${c.excluded ? '<span style="color:var(--red);">EXCLUDED</span>' : 'Slack + email'}</span></div>
+    <div class="field"><span class="key">Placement Relevant</span><span class="val">${c.placementRelevant ? '<span style="color:var(--accent);">YES</span>' : 'no'}</span></div>
+
+    ${c.piTransition ? `
+      <div style="margin-top:12px; padding:10px; background:rgba(108,140,255,0.08); border:1px solid rgba(108,140,255,0.2); border-radius:6px;">
+        <div style="font-size:11px; font-weight:600; color:var(--accent); margin-bottom:4px;">PlacementIntent Impact</div>
+        <div style="font-size:12px;">${c.piTransition}</div>
+      </div>
+    ` : ''}
+
+    ${c.rfqliTransition ? `
+      <div style="margin-top:8px; padding:10px; background:rgba(34,211,238,0.08); border:1px solid rgba(34,211,238,0.2); border-radius:6px;">
+        <div style="font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:4px;">RFQLI Impact</div>
+        <div style="font-size:12px;">${c.rfqliTransition}</div>
+      </div>
+    ` : ''}
+
+    <div style="margin-top:12px;">
+      <div style="font-size:11px; font-weight:600; color:var(--text-dim); margin-bottom:6px;">Downstream Actions:</div>
+      ${c.downstream.map(d => `<div style="font-size:11px; padding:3px 0; border-bottom:1px solid rgba(45,51,72,0.4); color:var(--text-dim);">• ${d}</div>`).join('')}
+    </div>
+  `;
+}
+
+buildEmailClassifications();
+
+</script>
+</body>
+</html>
