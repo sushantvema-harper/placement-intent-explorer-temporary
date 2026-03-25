@@ -585,6 +585,7 @@
   <div class="tab" data-panel="all-machines">All Machines</div>
   <div class="tab" data-panel="email-classifications">Email Classifications</div>
   <div class="tab" data-panel="work-items">Work Items</div>
+  <div class="tab" data-panel="harper-claw">Harper-Claw</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -1085,6 +1086,68 @@
       As PlacementIntent transitions are implemented, new work item types may be needed:
     </p>
     <div id="wi-planned-placement" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 9: Harper-Claw                       -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-harper-claw">
+  <h2 style="font-size:16px; margin-bottom:8px;">Harper-Claw (Jade v2) — Internal States & Actions</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">
+    Harper's autonomous shopping agent. Classifies inbound emails, drafts responses as Dakotah Rice, learns from corrections, and tracks shadow tasks.
+    Runs on Cloudflare Workers + Sandbox containers. Currently in shadow mode (drafts only, operator review required).
+  </p>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
+    Source: <code>harper-claw/</code> — SOUL.md, AGENTS.md, MEMORY.md, shadow.ts
+  </p>
+
+  <!-- Classification taxonomy -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Email Classification Taxonomy (4-level)</h3>
+  <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px;" id="hc-classifications"></div>
+
+  <!-- HTA subtypes -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Harper Team Action (HTA) Subtypes</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    When classification = HARPER_TEAM_ACTION, one of these subtypes MUST be included. Decline/remarketing HTAs go to <code>grace@</code> + <code>harsh@</code>. All others go to <code>drice@</code>.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:24px;">
+    <table class="rules-table" style="max-width:800px;" id="hc-hta-table">
+      <thead><tr><th style="width:30%;">Action Type</th><th style="width:45%;">When to Use</th><th style="width:25%;">Recipient</th></tr></thead>
+      <tbody id="hc-hta-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Inbound email types -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Inbound Email Types (Pre-Classification)</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Before classifying the action, harper-claw first detects the inbound email type. This feeds into the classification decision.
+  </p>
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; max-width:700px; margin-bottom:24px;" id="hc-inbound-types"></div>
+
+  <!-- Decision tree -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Quick Decision Tree</h3>
+  <div style="max-width:700px; margin-bottom:24px;" id="hc-decision-tree"></div>
+
+  <!-- Entity model -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Three Simultaneous Operating Levels</h3>
+  <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px;" id="hc-levels"></div>
+
+  <!-- Learning system -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Learning System (Feedback Loop)</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    When operators correct harper-claw's decisions, learnings are recorded. After 3+ same mistakes in a category, a skill file is auto-generated and loaded into the next session's prompt.
+  </p>
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px;" id="hc-learning-cats"></div>
+
+  <!-- Pre-send gates -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Pre-Send Gate (12-Step Checklist)</h3>
+  <div style="max-width:600px; margin-bottom:24px;" id="hc-gates"></div>
+
+  <!-- What it does NOT do -->
+  <div style="margin-top:16px; padding:16px; background:rgba(248,113,113,0.06); border:1px solid rgba(248,113,113,0.2); border-radius:8px;">
+    <h3 style="font-size:14px; color:var(--red); margin-bottom:8px;">What Harper-Claw Does NOT Do</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:var(--text-dim);" id="hc-not-do"></div>
   </div>
 </div>
 
@@ -4226,6 +4289,192 @@ function buildWorkItems() {
 }
 
 buildWorkItems();
+
+// ═══════════════════════════════════════════════
+// HARPER-CLAW (Jade v2) INTERNAL STATES
+// ═══════════════════════════════════════════════
+
+const HC_CLASSIFICATIONS = [
+  {
+    name: 'CUSTOMER_FOLLOW_UP', emoji: '📞', color: 'var(--green)',
+    def: 'Customer needs to provide or receive something. Always generates a draft email. Most common classification — if in doubt, classify here (per MEMORY.md: "act more, not less").',
+    examples: ['Customer asked for status update', 'Need loss runs from customer', 'Forward UW docs to customer', 'Acknowledge customer-provided documents'],
+    action: 'Draft email to customer as Dakotah Rice'
+  },
+  {
+    name: 'UNDERWRITER_FOLLOW_UP', emoji: '🔍', color: 'var(--accent)',
+    def: 'Underwriter needs a response, documents forwarded, or status check. Generates a draft to the UW. Never reveals carrier info to customers.',
+    examples: ['Forward customer docs to UW', 'Answer UW factual question from memory', 'Follow up on pending quote', 'Respond to UW document request'],
+    action: 'Draft email to underwriter as Dakotah Rice'
+  },
+  {
+    name: 'HARPER_TEAM_ACTION', emoji: '🚨', color: 'var(--red)',
+    def: 'Human intervention required. Creates an HTA escalation with a specific action_type subtype. Used for things harper-claw cannot handle autonomously.',
+    examples: ['Form fill required', 'All markets declined', 'UW raised concern/blocker', 'Customer requested a phone call'],
+    action: 'Create HTA via POST /create_hta with action_type subtype'
+  },
+  {
+    name: 'NO_ACTION', emoji: '⏭️', color: 'var(--text-dim)',
+    def: 'Nothing needed. ONLY for pure acknowledgments ("working on it") or explicit opt-outs ("not interested"). Cadence NEVER downgrades to NO_ACTION — if too soon, draft is held, not skipped.',
+    examples: ['UW says "working on it"', 'Customer says "not interested"', 'Auto-reply / OOO (but OOO actually → HTA)', 'Internal team thread'],
+    action: 'Store classification only — no draft, no escalation'
+  },
+];
+
+const HC_HTA_TYPES = [
+  { type: 'FORM_FILL_REQUIRED', when: 'Harper needs to fill a form (ACORD, BOR, etc.)', to: 'drice@' },
+  { type: 'FORM_CORRECTION_REQUIRED', when: 'Submitted form has errors', to: 'drice@' },
+  { type: 'BOR_GENERATION_REQUIRED', when: 'Broker Opinion Letter needed', to: 'drice@' },
+  { type: 'APPLICATION_PACKAGE_ASSEMBLY', when: 'Full submission package needs assembly', to: 'drice@' },
+  { type: 'CUSTOMER_CALL_REQUIRED', when: 'Customer explicitly requested a phone call', to: 'drice@' },
+  { type: 'ALL_MARKETS_DECLINED_REMARKET', when: 'All carriers declined, need remarketing strategy', to: 'grace@ + harsh@' },
+  { type: 'LICENSE_PROCUREMENT_REQUIRED', when: 'State license needed for submission', to: 'drice@' },
+  { type: 'UW_CONCERN_ESCALATION', when: 'UW raised concern/objection/blocker needing broker judgment', to: 'drice@' },
+  { type: 'MANUAL_INTERVENTION_REQUIRED', when: 'Default — unclear situation (OOO, data conflicts, system errors)', to: 'drice@' },
+];
+
+const HC_INBOUND_TYPES = [
+  { type: 'UW_DOCUMENT_REQUEST', sender: 'UW', def: 'Underwriter requests documents (loss runs, MVRs, financials)' },
+  { type: 'UW_QUESTION', sender: 'UW', def: 'Underwriter asks a factual question about the risk' },
+  { type: 'UW_STATUS_UPDATE', sender: 'UW', def: 'Carrier acknowledges receipt or says "working on it"' },
+  { type: 'UW_CONCERN', sender: 'UW', def: 'Underwriter expresses concern, blocker, or objection' },
+  { type: 'CUSTOMER_URGENCY', sender: 'Customer', def: 'Customer expresses frustration, deadline, or urgency' },
+  { type: 'CUSTOMER_DOCS_PROVIDED', sender: 'Customer', def: 'Customer attaches documents to the email' },
+  { type: 'CUSTOMER_QUESTION', sender: 'Customer', def: 'Customer asks about status or next steps' },
+  { type: 'CUSTOMER_OPT_OUT', sender: 'Customer', def: '"Not interested", "stop contacting me", "found another broker"' },
+];
+
+const HC_DECISIONS = [
+  { trigger: 'Customer provides docs', action: '(1) Acknowledge to customer, (2) Forward to UW', cls: 'CUSTOMER_FOLLOW_UP + UNDERWRITER_FOLLOW_UP' },
+  { trigger: 'UW asks factual question', action: 'Query memory FIRST. If found → answer from memory. If not → ask customer.', cls: 'UW_FOLLOW_UP or CUSTOMER_FOLLOW_UP' },
+  { trigger: 'Customer urgency', action: 'Acknowledge immediately + draft action to appropriate owner', cls: 'CUSTOMER_FOLLOW_UP' },
+  { trigger: 'UW says "working on it"', action: 'Log only. Pure acknowledgment = no response needed.', cls: 'NO_ACTION' },
+  { trigger: 'UW is out-of-office', action: 'Escalate with alternatives. Cannot proceed without UW.', cls: 'HARPER_TEAM_ACTION (OOO)' },
+  { trigger: 'Customer says "not interested"', action: 'Stop ALL outreach immediately. Log opt-out.', cls: 'NO_ACTION (terminal)' },
+  { trigger: 'Producer already handling', action: 'Let producer lead. Only escalate if producer silent 3+ days.', cls: 'NO_ACTION or HTA' },
+  { trigger: 'All carriers declined', action: 'Escalate to sales enablement for remarketing strategy.', cls: 'HTA (ALL_MARKETS_DECLINED)' },
+];
+
+const HC_LEARNING_CATS = [
+  { cat: 'validated', color: 'var(--green)', def: 'Harper-claw got it right. Correct classification confirmed by operator.' },
+  { cat: 'under_action', color: 'var(--yellow)', def: 'Harper-claw said NO_ACTION but operator responded. Should have drafted.' },
+  { cat: 'wrong_recipient', color: 'var(--red)', def: 'Drafted email to wrong person (e.g., customer instead of producer).' },
+  { cat: 'wrong_content', color: 'var(--orange)', def: 'Draft had different intent than what operator sent. Tone, content, or ask was different.' },
+  { cat: 'over_escalation', color: 'var(--purple)', def: 'Harper-claw escalated to HTA but operator sent a direct email instead. Escalated unnecessarily.' },
+];
+
+const HC_GATES = [
+  'Resolve recipient from DB (MANDATORY)',
+  'Validate recipient address (MANDATORY)',
+  'Human already acted in last 2 hours?',
+  'Account unenrolled / DO_NOT_CONTACT?',
+  'Customer opted out?',
+  'Recent phone call (wait 15 min for transcript)?',
+  'Hard rule check (no carrier names to customer, no ACORD #s, no hallucination)',
+  'UW recipient validation (no Harper domains, no team members)',
+  'Threading (correct existing thread, RE: subject)',
+  'Cadence dedup (hold if too soon on same topic)',
+  'Signature check (exact Dakotah Rice signature)',
+  'Email address source verification (from API, never guessed)',
+];
+
+const HC_NOT_DO = [
+  'Does NOT send emails (drafts only, operator review)',
+  'Does NOT modify production data',
+  'Does NOT give insurance advice',
+  'Does NOT reveal carrier/UW info to customers',
+  'Does NOT ask customers for ACORD forms',
+  'Does NOT hallucinate information',
+  'Does NOT interfere with Jade v1 operation',
+  'Does NOT transition CLS state machines (yet)',
+  'Does NOT call CLS transition APIs',
+  'Does NOT have an API contract with Agora',
+];
+
+const HC_LEVELS = [
+  { name: 'Account Level', color: 'var(--green)', desc: 'One thread per customer. Consolidates ALL outstanding items across ALL carriers into ONE email. Never send piecemeal communications.' },
+  { name: 'RFQ Level', color: 'var(--accent)', desc: 'Each carrier submission has its own thread. Never cross-contaminate carrier information. Different UWs = different threads.' },
+  { name: 'RFQ Line Item Level', color: 'var(--purple)', desc: 'Track state cycle per coverage×carrier: info_requested ↔ under_review. UW asks for info → info_requested. Info forwarded → under_review. Repeat until quoted or declined.' },
+];
+
+function buildHarperClaw() {
+  // Classifications
+  const clsEl = document.getElementById('hc-classifications');
+  clsEl.innerHTML = HC_CLASSIFICATIONS.map(c => `
+    <div style="flex:1; min-width:280px; padding:14px; background:var(--surface); border:1px solid var(--border); border-left:4px solid ${c.color}; border-radius:8px;">
+      <div style="font-size:14px; font-weight:600; color:${c.color}; margin-bottom:6px;">${c.emoji} ${c.name}</div>
+      <div style="font-size:11px; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">${c.def}</div>
+      <div style="font-size:10px; color:var(--cyan); margin-bottom:4px;">Action: ${c.action}</div>
+      <div style="font-size:10px; color:var(--text-dim);">
+        ${c.examples.map(e => `<div style="padding:1px 0;">• ${e}</div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  // HTA types
+  const htaBody = document.getElementById('hc-hta-body');
+  htaBody.innerHTML = HC_HTA_TYPES.map(h => `
+    <tr>
+      <td style="font-weight:600; font-size:11px; color:var(--red);">${h.type}</td>
+      <td style="font-size:11px; color:var(--text-dim);">${h.when}</td>
+      <td style="font-size:11px;">${h.to}</td>
+    </tr>
+  `).join('');
+
+  // Inbound types
+  const inbEl = document.getElementById('hc-inbound-types');
+  inbEl.innerHTML = HC_INBOUND_TYPES.map(t => `
+    <div style="padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+      <div style="font-size:12px; font-weight:600; color:${t.sender === 'UW' ? 'var(--accent)' : 'var(--green)'};">${t.type}</div>
+      <div style="font-size:10px; color:var(--text-dim); margin-top:2px;">${t.def}</div>
+    </div>
+  `).join('');
+
+  // Decision tree
+  const dtEl = document.getElementById('hc-decision-tree');
+  dtEl.innerHTML = HC_DECISIONS.map(d => `
+    <div style="display:flex; gap:12px; padding:8px 0; border-bottom:1px solid rgba(45,51,72,0.4); font-size:12px;">
+      <span style="font-weight:600; min-width:180px; color:var(--text);">${d.trigger}</span>
+      <span style="color:var(--text-dim); flex:1;">${d.action}</span>
+      <span style="font-size:10px; color:var(--cyan); min-width:120px; text-align:right;">${d.cls}</span>
+    </div>
+  `).join('');
+
+  // Operating levels
+  const lvlEl = document.getElementById('hc-levels');
+  lvlEl.innerHTML = HC_LEVELS.map(l => `
+    <div style="flex:1; min-width:200px; padding:12px; background:var(--surface); border:1px solid var(--border); border-top:3px solid ${l.color}; border-radius:8px;">
+      <div style="font-size:13px; font-weight:600; color:${l.color}; margin-bottom:6px;">${l.name}</div>
+      <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">${l.desc}</div>
+    </div>
+  `).join('');
+
+  // Learning categories
+  const lcEl = document.getElementById('hc-learning-cats');
+  lcEl.innerHTML = HC_LEARNING_CATS.map(l => `
+    <div style="padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-left:3px solid ${l.color}; border-radius:6px; min-width:200px;">
+      <div style="font-size:12px; font-weight:600; color:${l.color};">${l.cat}</div>
+      <div style="font-size:10px; color:var(--text-dim); margin-top:4px;">${l.def}</div>
+    </div>
+  `).join('');
+
+  // Pre-send gates
+  const gatesEl = document.getElementById('hc-gates');
+  gatesEl.innerHTML = HC_GATES.map((g, i) => `
+    <div style="display:flex; gap:8px; padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.4); font-size:12px;">
+      <span style="color:var(--text-dim); min-width:24px; text-align:right;">${i+1}.</span>
+      <span style="color:${i < 2 ? 'var(--red)' : 'var(--text-dim)'};">${g}</span>
+    </div>
+  `).join('');
+
+  // What it does NOT do
+  const notEl = document.getElementById('hc-not-do');
+  notEl.innerHTML = HC_NOT_DO.map(n => `
+    <div style="padding:3px 0;">❌ ${n}</div>
+  `).join('');
+}
+
+buildHarperClaw();
 
 </script>
 </body>
