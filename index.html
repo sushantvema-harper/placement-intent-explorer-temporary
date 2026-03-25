@@ -603,7 +603,6 @@
   <div class="tab" data-panel="pi-v2">PI v2 (Proposed)</div>
   <div class="tab" data-panel="rfqli">RFQLI Machine (v1)</div>
   <div class="tab" data-panel="scenarios">Scenario Player</div>
-  <div class="tab" data-panel="materialization">Status Materialization</div>
   <div class="tab" data-panel="all-machines">All Machines</div>
   <div class="tab" data-panel="email-classifications">Email Classifications</div>
   <div class="tab" data-panel="work-items">Work Items</div>
@@ -943,33 +942,6 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- Panel 5: Status Materialization            -->
-<!-- ═══════════════════════════════════════════ -->
-<div class="panel" id="panel-materialization">
-  <h2 style="font-size:16px; margin-bottom:8px;">Status Materialization Flow</h2>
-  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
-    Click a PlacementIntent state to see how it propagates up through RFQLI → RFQ → CoverageIntent → Opportunity.
-  </p>
-
-  <div class="mat-flow" id="mat-flow">
-    <!-- Built by JS -->
-  </div>
-
-  <div style="margin-top:32px;">
-    <h3 style="font-size:14px; margin-bottom:12px;">Aggregation Rules (RFQ from RFQLIs)</h3>
-    <table class="rules-table" style="max-width:600px;">
-      <thead><tr><th>RFQLI States</th><th>→ RFQ Status</th></tr></thead>
-      <tbody>
-        <tr><td>All pending</td><td>submitted</td></tr>
-        <tr><td>Some past pending (brokered)</td><td>awaiting_quote</td></tr>
-        <tr><td>Any info_requested</td><td>triaging</td></tr>
-        <tr><td>All terminal</td><td>completed</td></tr>
-        <tr><td>All withdrawn</td><td>withdrawn</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
 
 <!-- ═══════════════════════════════════════════ -->
 <!-- Panel 6: All Machines                      -->
@@ -3768,104 +3740,6 @@ document.querySelectorAll('#scenario-version-toggle button').forEach(btn => {
   btn.addEventListener('click', () => switchScenarioVersion(btn.dataset.version));
 });
 
-// ═══════════════════════════════════════════════
-// MATERIALIZATION PANEL
-// ═══════════════════════════════════════════════
-function buildMaterialization() {
-  const flow = document.getElementById('mat-flow');
-  const piStates = Object.keys(PI.stateTypes);
-
-  // PI Level
-  flow.innerHTML = `
-    <div style="font-size:13px; font-weight:600; color:var(--purple); margin-bottom:8px;">Click a PlacementIntent state:</div>
-    <div class="mat-level">
-      <div class="mat-label" style="color:var(--purple);">PlacementIntent</div>
-      <div class="mat-boxes">
-        ${piStates.map(s => `<div class="mat-box" data-pi="${s}" style="cursor:pointer; border-left:3px solid var(--purple);">${s}</div>`).join('')}
-      </div>
-    </div>
-    <div class="mat-arrow">↓ derives</div>
-    <div class="mat-level">
-      <div class="mat-label" style="color:var(--cyan);">RFQLI Status</div>
-      <div class="mat-boxes" id="mat-rfqli"></div>
-    </div>
-    <div class="mat-arrow">↓ aggregates</div>
-    <div class="mat-level">
-      <div class="mat-label" style="color:var(--accent);">RFQ Status</div>
-      <div class="mat-boxes" id="mat-rfq"></div>
-    </div>
-    <div class="mat-arrow">↓ informs</div>
-    <div class="mat-level">
-      <div class="mat-label" style="color:var(--green);">CoverageIntent</div>
-      <div class="mat-boxes" id="mat-ci"></div>
-    </div>
-    <div class="mat-arrow">↓ aggregates</div>
-    <div class="mat-level">
-      <div class="mat-label" style="color:var(--orange);">Opportunity</div>
-      <div class="mat-boxes" id="mat-opp"></div>
-    </div>
-  `;
-
-  // PI → RFQLI mapping
-  const piToRfqli = {
-    'waiting_for_uw': 'pending / under_review',
-    'quoted': 'quoted',
-    'proposal_sent': 'quoted',
-    'on_hold': 'info_requested',
-    'bound': 'quoted',
-    'declined_all': 'declined',
-    'resubmission': 'withdrawn',
-    'remarketing': 'withdrawn',
-    'cancelled': 'withdrawn'
-  };
-
-  const rfqliToRfq = {
-    'pending / under_review': 'awaiting_quote',
-    'quoted': 'completed (if all terminal)',
-    'info_requested': 'triaging',
-    'declined': 'completed (if all terminal)',
-    'withdrawn': 'withdrawn (if all withdrawn)'
-  };
-
-  const piToCi = {
-    'waiting_for_uw': 'placement',
-    'quoted': 'placement',
-    'proposal_sent': 'placement',
-    'on_hold': 'placement',
-    'bound': 'sales → binding → service',
-    'declined_all': 'placement (outcome: lost)',
-    'resubmission': 'submission (backtrack)',
-    'remarketing': 'submission (backtrack)',
-    'cancelled': 'cancelled'
-  };
-
-  const ciToOpp = {
-    'placement': 'in_progress',
-    'sales → binding → service': 'won (if all CIs done)',
-    'placement (outcome: lost)': 'lost (if all CIs lost)',
-    'submission (backtrack)': 'in_progress',
-    'cancelled': 'lost / cancelled'
-  };
-
-  flow.querySelectorAll('[data-pi]').forEach(box => {
-    box.addEventListener('click', () => {
-      flow.querySelectorAll('.mat-box').forEach(b => b.classList.remove('highlight'));
-      box.classList.add('highlight');
-
-      const piState = box.dataset.pi;
-      const rfqli = piToRfqli[piState] || '?';
-      const rfq = rfqliToRfq[rfqli] || '?';
-      const ci = piToCi[piState] || '?';
-      const opp = ciToOpp[ci] || '?';
-
-      document.getElementById('mat-rfqli').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--cyan);">${rfqli}</div>`;
-      document.getElementById('mat-rfq').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--accent);">${rfq}</div>`;
-      document.getElementById('mat-ci').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--green);">${ci}</div>`;
-      document.getElementById('mat-opp').innerHTML = `<div class="mat-box highlight" style="border-left:3px solid var(--orange);">${opp}</div>`;
-    });
-  });
-}
-buildMaterialization();
 
 // ═══════════════════════════════════════════════
 // ALL MACHINES PANEL
