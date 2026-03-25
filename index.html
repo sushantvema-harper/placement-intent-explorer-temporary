@@ -1070,7 +1070,7 @@
               <tr><td><span style="color:var(--green);">new</span></td><td>acknowledged</td><td style="color:var(--green);">Added (optional)</td></tr>
               <tr><td><span style="color:var(--green);">new</span></td><td>info_requested</td><td style="color:var(--green);">Added</td></tr>
               <tr><td><span style="color:var(--green);">new</span></td><td>price_indication</td><td style="color:var(--green);">Added</td></tr>
-              <tr><td><span style="color:var(--green);">new</span></td><td>disqualified_quote</td><td style="color:var(--green);">Added terminal</td></tr>
+              <tr><td><span style="color:var(--green);">new</span></td><td>disqualified_quote</td><td style="color:var(--green);">Added (parked — remediation loop)</td></tr>
             </tbody>
           </table>
         </div>
@@ -1134,11 +1134,11 @@
             <td>Shows "Rework" badge on old PI. New PI linked to same carrier — operator sees both attempts side-by-side.</td>
           </tr>
           <tr>
-            <td><span style="color:var(--cyan); font-weight:600;">3. Quote Rework</span><br><span style="color:var(--text-dim);">disqualified_quote → retry same carrier</span></td>
-            <td><span style="background:rgba(248,113,113,0.15); color:var(--red); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">terminal: disqualified_quote</span><br><span style="color:var(--text-dim);">Old PI frozen at disqualified_quote.</span></td>
-            <td style="color:var(--cyan); font-weight:600; text-align:center;">YES (lean phoenix)</td>
-            <td><code style="font-size:10px;">PI.prior_pi_id</code> (TBD) or metadata link<br><span style="color:var(--text-dim);">New PI to same carrier, same RFQLI or new RFQLI. No new SI required — same submission, just bad quote data.</span></td>
-            <td>Shows "Quote retry" badge. Old disqualified quote visible in quote history. Distinct from remarketing (same carrier, same coverage).</td>
+            <td><span style="color:var(--yellow); font-weight:600;">3. Quote Rework</span><br><span style="color:var(--text-dim);">disqualified_quote → retry same carrier</span></td>
+            <td><span style="background:rgba(251,191,36,0.15); color:var(--yellow); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">parked: disqualified_quote</span><br><span style="color:var(--text-dim);">PI loops back to under_review. Same row, same entity.</span></td>
+            <td style="color:var(--yellow); font-weight:600; text-align:center;">NO — Remediation loop</td>
+            <td><span style="color:var(--text-dim);">Same PI loops back to <code>under_review</code>. No new entity for same carrier. If switching carriers, PI goes to <code>remarketing</code> (terminal) and phoenix applies downstream.</span></td>
+            <td>Shows quote revision history on same PI. <code>revision_count</code> (TBD) tracks loop iterations. Distinct from remarketing (different carrier) where phoenix applies.</td>
           </tr>
           <tr>
             <td><span style="color:var(--green); font-weight:600;">4. Unsolicited Coverage</span><br><span style="color:var(--text-dim);">Carrier quotes GL + Cyber when only GL requested</span></td>
@@ -1191,6 +1191,72 @@
         The clearest example: a revised quote from the same carrier doesn't reset the PI — it adds a new Quote entity
         while the PI stays at <code>quote_received</code>. The PI tracks the carrier relationship; Quote tracks individual documents.
       </p>
+    </div>
+
+    <!-- ─── Remediation vs Phoenix ─── -->
+    <div style="margin-top:32px;">
+      <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Remediation vs Phoenix Patterns</h3>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+        CLS uses two distinct loop patterns. PI v2 at RFQLI level needs both.
+      </p>
+
+      <!-- Comparison table -->
+      <div style="overflow-x:auto; margin-bottom:20px;">
+        <table class="rules-table" style="max-width:1100px; font-size:11px;">
+          <thead>
+            <tr>
+              <th style="min-width:140px;">Pattern</th>
+              <th style="min-width:120px;">When</th>
+              <th style="min-width:120px;">Entity Fate</th>
+              <th style="min-width:180px;">Example in PI v2</th>
+              <th style="min-width:180px;">Analogous CLS Pattern</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="color:var(--yellow); font-weight:600;">Remediation (internal loop)</span></td>
+              <td>Same carrier, quote needs revision</td>
+              <td>PI loops back to active state, same row</td>
+              <td><code>disqualified_quote → under_review</code></td>
+              <td>IntakeWorkflow: <code>reviewing → remediation → collecting</code></td>
+            </tr>
+            <tr>
+              <td><span style="color:var(--yellow); font-weight:600;">Remediation (internal loop)</span></td>
+              <td>Info requested, then resolved</td>
+              <td>PI loops back, same row</td>
+              <td><code>info_requested → under_review</code></td>
+              <td>SubmissionIntent: <code>needs_info → preparing</code></td>
+            </tr>
+            <tr>
+              <td><span style="color:var(--green); font-weight:600;">Phoenix (new entity)</span></td>
+              <td>Different carriers / remarketing</td>
+              <td>Old PI terminates, new PI + RFQLI created</td>
+              <td><code>declined → remarketing → new PI</code></td>
+              <td>PI v1: resubmission/remarketing → new PI via <code>ensurePlacementIntent</code></td>
+            </tr>
+            <tr>
+              <td><span style="color:var(--green); font-weight:600;">Phoenix (new entity)</span></td>
+              <td>Packet was defective</td>
+              <td>Old PI terminates, new submission cycle</td>
+              <td><code>rework → new SI → new PI</code></td>
+              <td>SubmissionIntent: <code>TriggerRemarketing</code> creates new SI</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Key design change callout -->
+      <div style="padding:14px 16px; background:rgba(251,191,36,0.07); border:1px solid rgba(251,191,36,0.3); border-left:4px solid var(--yellow); border-radius:6px; max-width:900px;">
+        <div style="font-size:12px; font-weight:600; color:var(--yellow); margin-bottom:6px;">Key Design Change: disqualified_quote is NOT terminal in v2</div>
+        <p style="font-size:11px; color:var(--text); line-height:1.7; margin:0;">
+          <code>disqualified_quote</code> uses the <strong>remediation pattern</strong> — the same PI loops back to <code>under_review</code>
+          for same-carrier quote revision. No new entity is created for same-carrier retries.
+          Phoenix (new PI) only applies if the operator switches to a different carrier, in which case the PI transitions to
+          <code>remarketing</code> (terminal) and a new PI is created downstream.<br><br>
+          Consider adding <strong>revision_count</strong> (like <code>IntakeWorkflow.ReopenedCount</code>) to track how many times
+          a PI has looped through the disqualified_quote → under_review remediation cycle.
+        </p>
+      </div>
     </div>
   </div>
 </div>
@@ -1934,24 +2000,24 @@
       </details>
 
       <!-- 3. Quote Rework -->
-      <details style="background:var(--surface); border:1px solid rgba(34,211,238,0.3); border-left:4px solid var(--cyan); border-radius:8px; overflow:hidden;">
+      <details style="background:var(--surface); border:1px solid rgba(251,191,36,0.3); border-left:4px solid var(--yellow); border-radius:8px; overflow:hidden;">
         <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
-          <span style="color:var(--cyan);">~ MIXED</span>
-          <span style="color:var(--text);">3. Quote Rework — disqualified_quote → retry same carrier</span>
+          <span style="color:var(--yellow);">&#9654; REMEDIATION LOOP</span>
+          <span style="color:var(--text);">3. Quote Rework — disqualified_quote → under_review (same carrier, same PI)</span>
         </summary>
         <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
           <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
             <div>
-              <div style="font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:4px;">What triggers it</div>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">What triggers it</div>
               <p>A quote passed receipt but failed validation (<code>disqualified_quote</code>). Operator wants to contact the same carrier to get corrected quote data — not remarketing (same carrier, same coverage, no SI backtrack needed).</p>
-              <div style="font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:4px; margin-top:10px;">Entity creation chain (lean phoenix)</div>
-              <p>Old PI freezes at <code>disqualified_quote</code>. New PI created for same carrier/RFQLI. No new SI — same submission is still valid. Link via <code>PI.prior_pi_id</code> (field TBD — not in current schema).</p>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px; margin-top:10px;">Remediation loop (not phoenix)</div>
+              <p>The PI loops back to <code>under_review</code> — same entity, same row, no new PI created. This follows the remediation pattern (like IntakeWorkflow: <code>reviewing → remediation → collecting</code>). Consider tracking <code>revision_count</code> to record how many times the loop has executed.</p>
             </div>
             <div>
-              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">Why lean phoenix, not full backtrack</div>
-              <p>The submission was correct. The carrier relationship is intact. The carrier just sent bad quote data (missing field, wrong premium format, wrong limits). We go back to the same UW at the same carrier — no new packet needed.</p>
-              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px; margin-top:10px;">Open question</div>
-              <p>Should this create a new PI or allow the old PI to re-enter <code>under_review</code>? Creating a new PI preserves immutability and clean audit. The risk: proliferation of PI entities for each correction cycle.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">Why remediation, not phoenix</div>
+              <p>The submission was correct. The carrier relationship is intact. The carrier sent bad quote data (missing field, wrong premium format, wrong limits). We go back to the same UW — no new packet needed, no new entity. The PI is a parked holding state, not a dead end.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px; margin-top:10px;">When phoenix still applies</div>
+              <p>If the operator decides to switch to a <em>different carrier</em>, the PI transitions to <code>remarketing</code> (terminal) and a new PI is created downstream. Remarketing = phoenix. Same-carrier quote revision = remediation loop.</p>
             </div>
           </div>
         </div>
@@ -2075,7 +2141,7 @@
     <div style="max-width:900px; margin-bottom:16px;">
       <h4 style="font-size:13px; color:var(--accent); margin-bottom:10px;">MiniOrq Decision Tree: New Entity vs In-Place Update</h4>
       <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; font-size:11px; line-height:2;">
-        <div style="color:var(--text);">Is the PI in a <strong>terminal state</strong>? (declined, rework, remarketing, withdrawn, disqualified_quote)</div>
+        <div style="color:var(--text);">Is the PI in a <strong>terminal state</strong>? (declined, rework, remarketing, withdrawn)</div>
         <div style="padding-left:20px; border-left:2px solid var(--green); margin:4px 0 4px 8px;">
           <span style="color:var(--green); font-weight:600;">YES →</span> <strong>Create new entities.</strong> Old PI is history. New SI (if backtrack needed) or new PI (if lean phoenix). Always link via <code>prior_si_id</code> / <code>prior_pi_id</code>.
         </div>
@@ -3731,20 +3797,20 @@ const SCENARIOS_V2 = [
       {
         day: 'Day 8',
         event: 'Validation fails — class code mismatch detected',
-        detail: 'System validation catches: requested class 5183 but quote has 5187\nQuote #6001 status → invalid\nPI → disqualified_quote (terminal)\nThis isn\'t a decline — carrier said yes, but the quote is unusable as-is',
+        detail: 'System validation catches: requested class 5183 but quote has 5187\nQuote #6001 status → invalid\nPI → disqualified_quote (parked — NOT terminal; remediation available)\nThis isn\'t a decline — carrier said yes, but the quote is unusable as-is',
         states: { 'PI #17601': 'disqualified_quote', 'Quote #6001': 'invalid', 'Reason': 'class code mismatch' }
       },
       {
         day: 'Day 9',
         event: 'Operator triggers rework — go back to carrier with correction',
-        detail: 'Operator reviews the disqualified quote and determines it\'s fixable\nPI → rework (terminal — closes this PI)\nNew PI #17701 created for the corrected submission\nOperator emails Shannon: "Quote has wrong class code — should be 5183 not 5187"\nNew RFQLI #9601 → PI #17701 starts at submitted',
-        states: { 'PI #17601': 'rework', 'New PI #17701': 'submitted', 'New RFQLI #9601': 'submitted', 'Action': 'correction sent to RT' }
+        detail: 'Operator reviews the disqualified quote and determines it\'s fixable with same carrier\nRemediation loop: PI #17601 loops back → under_review (no new entity created)\nOperator emails Shannon: "Quote has wrong class code — should be 5183 not 5187"\nrevision_count incremented on PI #17601\nNote: if switching carriers, would use remarketing → new PI instead',
+        states: { 'PI #17601': 'under_review (remediation loop, revision_count=1)', 'Quote #6001': 'invalid (preserved as history)', 'Action': 'correction sent to Shannon' }
       },
       {
         day: 'Day 11',
         event: 'Shannon sends corrected quote: $13,800/yr with correct class code 5183',
-        detail: 'Quote #6002 created (type: full_quote, class code 5183)\nNew PI #17701 → quote_received → validated → approved_quote\nSlightly lower premium with correct class code\nRework successful — placement can proceed',
-        states: { 'New PI #17701': 'approved_quote', 'Quote #6002': 'validated ($13,800)', 'Old PI #17601': 'rework (closed)' }
+        detail: 'Quote #6002 created (type: full_quote, class code 5183)\nSame PI #17601 → quote_received → validated → approved_quote\nSlightly lower premium with correct class code\nRemediation successful — same PI completed the cycle without creating new entities',
+        states: { 'PI #17601': 'approved_quote', 'Quote #6002': 'validated ($13,800)', 'Quote #6001': 'invalid (history)' }
       },
     ]
   },
@@ -4255,15 +4321,16 @@ buildRFQLISVG();
 // ═══════════════════════════════════════════════
 const PIV2 = {
   initial: 'submitted',
-  terminals: ['approved_quote', 'disqualified_quote', 'declined', 'withdrawn', 'remarketing', 'rework'],
+  terminals: ['approved_quote', 'declined', 'withdrawn', 'remarketing', 'rework'],
   transitions: {
-    'submitted':         ['acknowledged', 'under_review', 'info_requested', 'declined', 'withdrawn', 'on_hold'],
-    'acknowledged':      ['under_review', 'info_requested', 'declined', 'withdrawn', 'on_hold'],
-    'under_review':      ['info_requested', 'price_indication', 'quote_received', 'declined', 'withdrawn', 'on_hold'],
-    'info_requested':    ['under_review', 'declined', 'withdrawn', 'on_hold', 'rework'],
-    'price_indication':  ['quote_received', 'declined', 'on_hold'],
-    'quote_received':    ['approved_quote', 'disqualified_quote', 'on_hold'],
-    'on_hold':           ['submitted', 'acknowledged', 'under_review', 'info_requested', 'price_indication', 'quote_received', 'withdrawn'],
+    'submitted':          ['acknowledged', 'under_review', 'info_requested', 'declined', 'withdrawn', 'on_hold'],
+    'acknowledged':       ['under_review', 'info_requested', 'declined', 'withdrawn', 'on_hold'],
+    'under_review':       ['info_requested', 'price_indication', 'quote_received', 'declined', 'withdrawn', 'on_hold'],
+    'info_requested':     ['under_review', 'declined', 'withdrawn', 'on_hold', 'rework'],
+    'price_indication':   ['quote_received', 'declined', 'on_hold'],
+    'quote_received':     ['approved_quote', 'disqualified_quote', 'on_hold'],
+    'disqualified_quote': ['under_review', 'declined', 'withdrawn', 'remarketing'],
+    'on_hold':            ['submitted', 'acknowledged', 'under_review', 'info_requested', 'price_indication', 'quote_received', 'withdrawn'],
     // terminals have no outgoing (except remarketing which backtracks CI)
   },
   stateTypes: {
@@ -4275,7 +4342,7 @@ const PIV2 = {
     'quote_received':     'active',
     'on_hold':            'parked',
     'approved_quote':     'terminal-win',
-    'disqualified_quote': 'terminal',
+    'disqualified_quote': 'parked',
     'declined':           'terminal',
     'withdrawn':          'terminal',
     'remarketing':        'terminal',
@@ -4299,6 +4366,7 @@ const PIV2 = {
       def: 'Carrier is actively reviewing the submission. UW has the packet and is evaluating the risk. Ball is in the carrier\'s court.',
       rfqli: 'under_review',
       who: 'Operator or signal (carrier response indicating active review)',
+      note: 'Can be re-entered from disqualified_quote (remediation loop) — same carrier, same PI, quote revision cycle.',
       src: 'new in v2 — granular state within old waiting_for_uw'
     },
     'info_requested': {
@@ -4337,10 +4405,10 @@ const PIV2 = {
       src: 'new in v2 — from transcript: "approved quote is what tells you let\'s go to the next stage"'
     },
     'disqualified_quote': {
-      def: 'Quote received but failed validation — extraction errors, mismatched data, terms don\'t match what was requested, or carrier sent wrong coverage. May trigger rework (go back to carrier) or remarketing.',
+      def: 'Quote received but failed validation — extraction errors, mismatched data, terms don\'t match what was requested, or carrier sent wrong coverage. Holding state, not a dead end: operator can loop back to under_review (same carrier, quote revision) or go terminal (declined/withdrawn/remarketing).',
       rfqli: 'quoted (but Quote.status = invalid)',
       who: 'Operator or system after validation fails',
-      note: 'Different from declined (carrier said no) — here the carrier said yes but the quote is unusable.',
+      note: 'Remediation pattern (like IntakeWorkflow): loops back to under_review for same carrier. Phoenix (new PI) only if switching to different carrier.',
       src: 'new in v2 — from transcript: "if it\'s invalid... it could mean we can figure out what\'s going on"'
     },
     'declined': {
@@ -4400,7 +4468,7 @@ const PIV2_RFQLI_MAP = [
   { pi: 'price_indication', rfqli: 'price_indication', note: 'RFQLI carries PriceIndicationPremium + PriceIndicationLimits payload' },
   { pi: 'quote_received', rfqli: 'quoted', note: 'Quote entity exists but may not be validated yet' },
   { pi: 'approved_quote', rfqli: 'quoted', note: 'Quote validated + approved. Quote.status = selected' },
-  { pi: 'disqualified_quote', rfqli: 'quoted', note: 'Quote exists but invalid. Quote.status = invalid' },
+  { pi: 'disqualified_quote', rfqli: 'quoted', note: 'Quote exists but invalid. Quote.status = invalid. RFQLI stays at quoted — PI is in remediation, not terminal.' },
   { pi: 'on_hold', rfqli: '(prior status preserved)', note: 'RFQLI does not change when PI is paused' },
   { pi: 'declined', rfqli: 'declined', note: 'Direct 1:1. RFQLI.declination_category populated' },
   { pi: 'withdrawn', rfqli: 'withdrawn', note: 'Direct 1:1' },
@@ -6247,7 +6315,7 @@ const PI_TRANSITIONS = [
     notes: 'Positive terminal for PI. Everything after approved_quote is the sales/binding domain.'
   },
   {
-    group: 'terminal',
+    group: 'recovery',
     from: 'quote_received',
     to: 'disqualified_quote',
     trigger: 'Quote validation fails (FAIL verdict from Atlas-Lackey, or operator rejects on MegaBro).',
@@ -6257,12 +6325,29 @@ const PI_TRANSITIONS = [
     ],
     workItems: [
       { action: 'COMPLETE', title: 'Complete the validation task with result=failed.', kind: '', meta: '' },
-      { action: 'CREATE', title: '"Review disqualified quote from [carrier] — determine next steps"', kind: 'task', meta: '{ quote_id: X, validation_result: "FAIL" }' }
+      { action: 'CREATE', title: '"Review disqualified quote from [carrier] — loop back to carrier or remarket?"', kind: 'task', meta: '{ quote_id: X, validation_result: "FAIL" }' }
     ],
     relay: [],
     notifications: [],
     downstream: [],
-    notes: 'Operator decides: rework (go back to carrier) or remarket (try different carriers). The follow-up task drives the next action.'
+    notes: 'Remediation pattern — disqualified_quote is NOT terminal. If operator retries with same carrier, PI loops to under_review (no new entity). If switching carriers, PI goes to remarketing (phoenix). The follow-up task drives which path the operator chooses.'
+  },
+  {
+    group: 'recovery',
+    from: 'disqualified_quote',
+    to: 'under_review',
+    trigger: 'Operator decides to retry with same carrier after quote revision (same-carrier remediation loop).',
+    clsCalls: [
+      { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "under_review" }' }
+    ],
+    workItems: [
+      { action: 'COMPLETE', title: 'Complete the disqualified quote review task.', kind: '', meta: '' },
+      { action: 'CREATE', title: '"Re-engage [carrier] for revised quote — round [revision_count+1]"', kind: 'task', meta: '{ sla_days: 5, revision_count: N }' }
+    ],
+    relay: [],
+    notifications: [],
+    downstream: [],
+    notes: 'Remediation loop. Same PI, same entity — no new PI created. Consider incrementing revision_count on PI metadata to track how many times the loop has run. SLA clock restarts for revised quote response.'
   },
   {
     group: 'terminal',
@@ -6340,7 +6425,7 @@ const PI_TRANSITIONS = [
     group: 'recovery',
     from: 'declined / disqualified_quote',
     to: 'remarketing',
-    trigger: 'Operator clicks "Remarket" on MegaBro after reviewing decline reasons.',
+    trigger: 'Operator clicks "Remarket" on MegaBro after reviewing decline reasons or deciding to switch carriers.',
     clsCalls: [
       { method: 'POST', endpoint: '/placements/{pi_id}/transition', body: '{ status: "remarketing" }' }
     ],
@@ -6354,7 +6439,7 @@ const PI_TRANSITIONS = [
       'New SubmissionIntent created (type=remarketing, prior_si_id references original).',
       'New RFQs + PIs will be created when the new submission is dispatched.'
     ],
-    notes: ''
+    notes: 'From disqualified_quote: this is the phoenix path — operator chose to switch carriers rather than retry same carrier. Remediation loop (same carrier retry) = disqualified_quote → under_review instead.'
   },
   {
     group: 'recovery',
@@ -6383,7 +6468,8 @@ const WORK_ITEM_TEMPLATES = [
   { transition: '→ price_indication',  title: '"Review price indication — {carrier} ${premium}"', kind: 'task', meta: '{ premium, limits }' },
   { transition: '→ quote_received',    title: '"Validate quote — {carrier} ${premium}"',          kind: 'task', meta: '{ quote_id, needs_validation: true }' },
   { transition: '→ approved_quote',    title: '"Present quote to customer — {carrier} ${premium}"', kind: 'task', meta: '{ quote_id, for_sales: true }' },
-  { transition: '→ disqualified_quote',title: '"Review disqualified quote — determine next steps"', kind: 'task', meta: '{ quote_id, validation_result }' },
+  { transition: '→ disqualified_quote',title: '"Review disqualified quote — loop back to carrier or remarket?"', kind: 'task', meta: '{ quote_id, validation_result }' },
+  { transition: 'disqualified_quote → under_review', title: '"Re-engage {carrier} for revised quote — round {revision_count+1}"', kind: 'task', meta: '{ sla_days: 5, revision_count }' },
   { transition: '→ declined (all PIs)', title: '"All carriers declined — evaluate remarketing"',  kind: 'task', meta: '{ decline_reasons: [...] }' },
   { transition: '→ remarketing',       title: '"Prepare remarketing packet — target E&S"',        kind: 'task', meta: '{ prior_si_id }' },
   { transition: '→ rework',            title: '"Fix submission packet — {issue}"',                kind: 'task', meta: '{ issue_description }' }
