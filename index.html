@@ -1195,6 +1195,18 @@
     Architecture: Zephyrus → <strong>CASHMONEY / Antares</strong> → CLS → <strong>Agora / MiniOrq</strong>
   </p>
 
+  <div style="padding:14px; background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.3); border-radius:8px; margin-bottom:24px;">
+    <div style="font-size:13px; font-weight:600; color:var(--red); margin-bottom:6px;">⚠ Production Reality Check (verified 2026-03-25)</div>
+    <div style="font-size:11px; color:var(--text-dim); line-height:1.6;">
+      <strong>The live RFQ creation pipeline does NOT exist in production yet.</strong><br>
+      • All 25,440 RFQs in <code>cpq.request_for_quote</code> were created by a <code>backfill_public_submissions</code> batch job — no runtime service is creating RFQs.<br>
+      • Production schema is missing columns: <code>channel</code>, <code>is_synthetic</code>, <code>snapshot_underwriter_name</code>, <code>snapshot_carrier_name</code>. CLS migrations not applied.<br>
+      • BigBrother → Agora proxy code exists but is not producing RFQs (zero BB-triggered RFQs found).<br>
+      • PlacementIntents ARE actively created (564 in last 30 days) but via Process Manager at OLI level, NOT via RFQ creation.<br>
+      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, CLS schema migrations must be applied and a live RFQ creation pipeline must be running.
+    </div>
+  </div>
+
   <!-- Four-layer architecture diagram -->
   <div id="miniorq-arch" style="display:flex; gap:16px; margin-bottom:32px; flex-wrap:wrap;"></div>
 
@@ -1235,6 +1247,9 @@
 
   <!-- Section 3: Sequence Diagrams -->
   <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Operational Sequence Flows</h3>
+  <p style="font-size:11px; color:var(--yellow); margin-bottom:12px; font-style:italic;">
+    ⚠ These flows describe the intended v2 architecture. Current production uses a backfilled RFQ dataset and PI is created at OLI level (v1 model). See production reality check above.
+  </p>
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
     Step-by-step flows showing exact API calls and data flow for each placement orchestration scenario.
     Click a flow to expand/collapse.
@@ -4476,6 +4491,9 @@ const WI_PLANNED_PLACEMENT = [
   { title: 'Placement Task (Quote Validation)', desc: 'kind=task, entity_type=placement_intent — "Validate extracted quote", "Compare with competing quotes", "Prepare proposal". Created when PI transitions to quoted.', priority: 'Medium' },
   { title: 'Placement Task (Remarketing)', desc: 'kind=task, entity_type=placement_intent — "Review decline reasons", "Identify E&S carriers", "Prepare remarketing packet". Created when all PIs for OLI are declined.', priority: 'Medium' },
   { title: 'RFQ Assignment', desc: 'kind=assignment, entity_type=rfq — operator or AI agent assigned to manage an entire RFQ (all line items for one carrier). Alternative to per-PI assignment.', priority: 'Low' },
+  { title: 'CLS Schema Migration: RFQ v2 columns', desc: 'Apply migrations adding channel, is_synthetic, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url to cpq.request_for_quote. Required before live RFQ creation.', priority: 'High' },
+  { title: 'Live RFQ Creation Pipeline', desc: 'Wire Agora post-dispatch workflow to actually create RFQs in CLS production. Code exists (CreateRFQFromDispatchActivity) but is not running against production schema. Requires schema migration first.', priority: 'High' },
+  { title: 'BigBrother RFQ Sync Verification', desc: 'Verify BB → Agora → CLS RFQ proxy path works end-to-end. Code exists in BB cls-sync.ts but zero BB-triggered RFQs found in production.', priority: 'Medium' },
 ];
 
 // (Legacy constants removed)
