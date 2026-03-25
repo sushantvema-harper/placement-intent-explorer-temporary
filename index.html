@@ -781,6 +781,7 @@
           <li>CASHMONEY quote events drive <code style="font-size:11px; background:var(--surface2); padding:1px 4px; border-radius:3px;">quoted</code> transitions</li>
           <li>Jade sends approved follow-ups on heartbeat cadence</li>
           <li>Operators handle HTAs — one-click resolution</li>
+          <li><strong>Requires formal evaluation framework</strong> before Jade can drive transitions — stratified sampling, LLM-as-judge, binary feedback</li>
         </ul>
       </div>
 
@@ -795,7 +796,11 @@
           <li>Cross-carrier deduplication: 3 carriers asking = 1 customer email</li>
           <li>Proactive underwriter digests and status reporting</li>
           <li>Operators focus on complex/high-value placements only</li>
+          <li><strong>Requires proven evaluation metrics</strong> — stratified sampling, version-controlled harness (system prompt + context injection + model params), no catastrophic forgetting</li>
         </ul>
+        <div style="margin-top:8px; padding:8px 12px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2); border-radius:6px; font-size:11px; color:var(--yellow);">
+          Jade autonomy is gated by evaluation quality, not just engineering readiness.
+        </div>
       </div>
 
     </div>
@@ -1323,9 +1328,12 @@
 <!-- ═══════════════════════════════════════════ -->
 <div class="panel" id="panel-scenarios">
   <h2 style="font-size:16px; margin-bottom:8px;">Scenario Player</h2>
-  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">
     Walk through concrete scenarios step by step — specific companies, coverages, carriers, and premiums.
     Each step shows entity IDs, dollar amounts, and the exact state transitions.
+  </p>
+  <p style="font-size:11px; color:var(--yellow); margin-bottom:24px; padding:8px 12px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.15); border-radius:6px;">
+    These scenarios are designed to be converted into pure function integration tests — Jade-agnostic verification that state transitions flow correctly from inputs to terminal states across different customer journeys.
   </p>
 
   <div class="version-toggle" id="scenario-version-toggle">
@@ -1729,6 +1737,43 @@
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:24px;">
     Source: <code>harper-claw/</code> — SOUL.md, AGENTS.md, MEMORY.md, shadow.ts
   </p>
+
+  <!-- Evaluation & Gating Criteria (from 2026-03-25 Placements Architecture Discussion) -->
+  <div style="margin-bottom:32px; padding:20px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px; max-width:900px;">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--yellow);">Evaluation & Gating Criteria</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+      Jade autonomy is gated by evaluation quality, not just engineering readiness. The harper-claw open harness over-expands internal states/classifications — responses are broad but accuracy suffers. Evaluation criteria must be decoupled from the output/action space.
+    </p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:11px; color:var(--text-dim);">
+      <div style="padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+        <div style="font-weight:700; color:var(--text); margin-bottom:6px;">Current Accuracy</div>
+        <div>~85% (release gate: <strong style="color:var(--green);">98%</strong>)</div>
+      </div>
+      <div style="padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+        <div style="font-weight:700; color:var(--text); margin-bottom:6px;">Evaluation Methods</div>
+        <div>Stratified sampling across action categories, LLM-as-judge, binary feedback (~100 instances from Harsh)</div>
+      </div>
+      <div style="padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+        <div style="font-weight:700; color:var(--text); margin-bottom:6px;">Version Control</div>
+        <div>System prompt, context injection function, model, parameters, skill files, memory snapshots — all must be versioned. Formal DSL for versioning.</div>
+      </div>
+      <div style="padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+        <div style="font-weight:700; color:var(--text); margin-bottom:6px;">Catastrophic Forgetting</div>
+        <div>Continuous learning without proper evals leads to policy degradation. Learnings must be isolated between versions.</div>
+      </div>
+      <div style="padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+        <div style="font-weight:700; color:var(--text); margin-bottom:6px;">Context Strategy</div>
+        <div>75% deterministic CLS data (account, opp, RFQ, OLI) + 25% stochastic memory (Vegapunk)</div>
+      </div>
+      <div style="padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;">
+        <div style="font-weight:700; color:var(--text); margin-bottom:6px;">A/B Testing</div>
+        <div>Different harness configurations can be tested against the same eval set. Deterministic CLS context enables reproducibility.</div>
+      </div>
+    </div>
+    <div style="margin-top:12px; font-size:10px; color:var(--text-dim);">
+      Owner: Giridhar. Source: 2026-03-25 Placements Architecture Discussion.
+    </div>
+  </div>
 
   <!-- Classification taxonomy -->
   <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Email Classification Taxonomy (4-level)</h3>
@@ -7347,6 +7392,7 @@ const ENG_PHASES = {
   5: { label: 'Phase 5: MegaBro Placements Page', color: 'var(--green)' },
   6: { label: 'Phase 6: Observability & Production Readiness', color: 'var(--red)' },
   7: { label: 'Phase 7: Instant Quote Unification', color: '#f472b6' },
+  8: { label: 'Phase 8: Jade Evaluation & Harper-Claw Hardening', color: 'var(--orange)' },
 };
 
 const ENG_TODOS = [
@@ -7755,6 +7801,98 @@ const ENG_TODOS = [
     priority: 'Med',
     status: 'Not Started',
     notes: 'PI v2 channel paths tab documents the three paths and which states each skips. ensurePlacementIntent currently always starts at waiting_for_uw — must be updated for fast-track.',
+  },
+
+  // ── Phase 8: Jade Evaluation & Harper-Claw Hardening ─────────────────────
+  {
+    phase: 8, seq: 35,
+    title: 'Jade Evaluation Framework',
+    desc: 'Stratified sampling across action categories, LLM-as-judge + binary feedback interface, version control for system prompts + context injection + model params. Addresses catastrophic forgetting risk. ~100 instances of human binary feedback from Harsh available as initial eval set.',
+    services: ['Harper-Claw'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 Placements Architecture Discussion. Current accuracy ~85%, release gate 98%. Owner: Giridhar. Evaluation quality gates Jade autonomy — v1/v2 rollout depends on this.',
+  },
+  {
+    phase: 8, seq: 36,
+    title: 'Harper-Claw Harness Version Control',
+    desc: 'DSL or system for versioning all harness variables: system prompt, context injector function, model, parameters, skill files, memory snapshots. Each version is isolated — learnings do not spill across versions. Prevents catastrophic forgetting.',
+    services: ['Harper-Claw'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Formal DSL for versioning enables A/B testing of harness configs against the same eval set. Owner: Giridhar.',
+  },
+  {
+    phase: 8, seq: 37,
+    title: 'Jade Action Display in MegaBro Placements UI',
+    desc: 'Show Jade actions and communications at the PlacementIntent level and aggregated across RFQs per OLI. Follow existing MegaBro CRM extension patterns. At least 1-2 days of work.',
+    services: ['MegaBro', 'Harper-Claw'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Communication part of Jade works well — customer follow-ups for specific codes are precise. Display needs to surface this in placements UI.',
+  },
+  {
+    phase: 8, seq: 38,
+    title: 'Deterministic CLS Context for Harper-Claw',
+    desc: 'Feed 75% deterministic CLS data (account, opportunities, RFQs, OLIs via existing CLS APIs) + 25% stochastic memory (Vegapunk) into harper-claw decisions. Enables A/B testing of harness configurations.',
+    services: ['Harper-Claw', 'CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Existing CLS APIs available for RFQs, OLIs, accounts, opportunities. Deterministic context improves reproducibility and eval quality.',
+  },
+  {
+    phase: 8, seq: 39,
+    title: 'Scenario Player → Integration Tests',
+    desc: 'Convert the 5 scenario player journeys into pure function integration tests. Jade-agnostic: test state transition logic based on status inputs flowing to terminal states. Step through journeys to identify missing Jade actions/scenarios.',
+    services: ['Agora', 'CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Scenarios become customer journey validation tests — not Jade-specific, purely state machine correctness.',
+  },
+  {
+    phase: 8, seq: 40,
+    title: 'Deprecate Harper Team Actions in favor of Placement Work Items',
+    desc: 'Harper-claw retains HTA API for backward compatibility but new Jade is more accurate, has better reasoning traces, and is more token efficient. New placement work items (core.work_item with entity_type=placement_intent) replace HTAs as the primary operator action surface.',
+    services: ['Harper-Claw', 'CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Depends on Phase 3 seq 18 (placement work items in CLS).',
+  },
+  {
+    phase: 5, seq: 27,
+    title: 'Wire TransitionTimeline into MegaBro placements extension',
+    desc: 'TransitionTimeline component already exists (used for orders). BFF already returns timeline array. Just needs a "History" tab wired into the placementExtension side panel.',
+    services: ['MegaBro'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Low effort — component and data both exist, just needs wiring.',
+  },
+  {
+    phase: 8, seq: 41,
+    title: 'CLS: Add GET /remediation-rounds endpoint',
+    desc: 'Table exists (core.remediation_round) but no HTTP API is exposed. Needed for round-context display in MegaBro placements timeline and Jade action context.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Table exists but is not accessible via API.',
+  },
+  {
+    phase: 8, seq: 42,
+    title: 'Populate audit.entity_transition.reason field',
+    desc: 'Most transition rows have null reason. If reason is user-visible in the timeline UI, CLS reducers need to populate it when performing transitions.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'From 2026-03-25 discussion. Low priority unless timeline UI is actively displaying reasons.',
   },
 ];
 
