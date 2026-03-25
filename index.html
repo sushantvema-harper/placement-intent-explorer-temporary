@@ -598,6 +598,7 @@
 
 <div class="tabs">
   <div class="tab active" data-panel="objective">Objective</div>
+  <div class="tab" data-panel="intents">Understanding Intents</div>
   <div class="tab" data-panel="overview">Old → New Model</div>
   <div class="tab" data-panel="hierarchy">Entity Hierarchy</div>
   <div class="tab" data-panel="placement">PI v1 (Current)</div>
@@ -860,6 +861,13 @@
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
+<!-- Panel: Understanding Intents               -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-intents">
+  <div id="intents-content"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
 <!-- Panel 1: Old vs New Model                  -->
 <!-- ═══════════════════════════════════════════ -->
 <div class="panel" id="panel-overview">
@@ -1087,9 +1095,24 @@
   <div style="margin-top:32px;">
     <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">RFQLI Status Materialization (PI → RFQLI)</h3>
     <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
-      In v2, there is <strong>no separate RFQLI state machine</strong>. RFQLI.status is a pure derivation from PI.status.
-      The RFQLI table column is kept for backward compatibility and dashboard display, but is never independently transitioned.
+      In v2, there is <strong>no separate RFQLI state machine</strong>. RFQLI.status is a pure derivation from PI.status,
+      and is never independently transitioned.
     </p>
+
+    <!-- Backwards Compatibility Callout -->
+    <div style="padding:14px 18px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.25); border-left:4px solid var(--green); border-radius:6px; max-width:780px; margin-bottom:16px;">
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--green); margin-bottom:8px;">Backwards Compatibility: RFQLI.status can be dropped</div>
+      <p style="font-size:11px; color:var(--text); line-height:1.7; margin:0;">
+        <strong>The RFQLI.status column does NOT need to be maintained for backwards compatibility.</strong><br>
+        MegaBro is a beta project — breaking changes are acceptable.<br>
+        BigBrother (old CRM) interacts with RFQs only via the Agora proxy endpoints
+        (<code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">POST /sync/company-submitted</code> and
+        <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">POST /rfqs</code>)
+        during submission dispatch. BigBrother never reads RFQLI.status directly from the database.<br><br>
+        <strong>Decision: RFQLI.status can be removed entirely once PI v2 is the source of truth.</strong>
+        No backwards-compat view or shadow-write is required. PI v2 replaces it completely.
+      </p>
+    </div>
     <table class="rules-table" style="max-width:600px;">
       <thead><tr><th>PI v2 State</th><th>→ RFQLI.status (derived)</th><th>Notes</th></tr></thead>
       <tbody id="piv2-mat-body"></tbody>
@@ -2535,6 +2558,82 @@
     The placement lifecycle (PI v2, RFQLI derivation, live RFQ creation) does not yet exist in production.
     All 25,440 RFQs in production were created by a one-time backfill — no runtime service is producing them.
     This roadmap brings the full placement funnel to production in seven phases, gate-by-gate.
+  </div>
+
+  <!-- ─── Backwards Compatibility Analysis ─── -->
+  <div style="margin-bottom:28px; padding:18px 20px; background:var(--surface); border:1px solid var(--border); border-radius:8px; max-width:900px;">
+    <div style="font-size:13px; font-weight:700; color:var(--accent); margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid var(--border);">Backwards Compatibility Analysis (2026-03-25)</div>
+
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:14px; line-height:1.6;">
+      <strong style="color:var(--text);">Key findings:</strong> MegaBro is beta (no production users → break freely).
+      BigBrother is the only active consumer, and only for core submissions flow.
+      BigBrother never reads from CLS/Agora database tables directly — it only calls Agora HTTP endpoints.
+      Source: <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">bigbrother/src/lib/services/cls-sync.ts</code> — all BB→Agora interaction goes through <code style="font-size:10px; background:var(--surface2); padding:1px 4px; border-radius:3px;">callAgora()</code>.
+    </p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+      <div>
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--red); margin-bottom:10px;">Must Keep (BigBrother submissions)</div>
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:11px;">
+          <div style="padding:8px 12px; background:rgba(248,113,113,0.07); border:1px solid rgba(248,113,113,0.2); border-radius:5px; line-height:1.5;">
+            <strong>POST /sync/company-submitted</strong><br>
+            <span style="color:var(--text-dim);">BB calls this after log-submission transaction. Agora → CLS transitions all active intents → "submitted".</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(248,113,113,0.07); border:1px solid rgba(248,113,113,0.2); border-radius:5px; line-height:1.5;">
+            <strong>POST /rfqs</strong><br>
+            <span style="color:var(--text-dim);">BB calls this with underwriter list after submission. Agora creates RFQs for each underwriter.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(248,113,113,0.07); border:1px solid rgba(248,113,113,0.2); border-radius:5px; line-height:1.5;">
+            <strong>POST /sync/company-stage-changed</strong><br>
+            <span style="color:var(--text-dim);">BB calls this on kanban drag or stage change. Agora maps BB stage → CLS status transition.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(248,113,113,0.07); border:1px solid rgba(248,113,113,0.2); border-radius:5px; line-height:1.5;">
+            <strong>BB <code style="font-size:10px;">submission_underwriter_join</code> table</strong><br>
+            <span style="color:var(--text-dim);">Source of underwriter data for RFQ creation. BB reads this, passes underwriters[] to POST /rfqs.</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--green); margin-bottom:10px;">Can Break Freely (no compat obligation)</div>
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:11px;">
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>RFQLI.status column</strong><br>
+            <span style="color:var(--text-dim);">BB never reads it. MegaBro is beta. Drop entirely once PI v2 is source of truth.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>cpq.request_for_quote / cpq.request_for_quote_line_item</strong><br>
+            <span style="color:var(--text-dim);">Legacy CPQ tables. No production consumer. Drop.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>insurance.rfq / insurance.rfq_line_item_v2</strong><br>
+            <span style="color:var(--text-dim);">CLS migration 028 — never applied to production. These tables don't exist. Drop the migration.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>PI v1 state machine</strong><br>
+            <span style="color:var(--text-dim);">MegaBro is beta, BB doesn't read PI state. Replace v1 → v2 without compat shim.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>MegaBro placements page</strong><br>
+            <span style="color:var(--text-dim);">Beta, no production users. Break freely during PI v2 rollout.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>insurance.instant_quote entity</strong><br>
+            <span style="color:var(--text-dim);">0 rows in production, never used. Drop without migration period.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>MegaBro sync pipeline references to ghost tables</strong><br>
+            <span style="color:var(--text-dim);">Beta — fix forward, no need to maintain ghost-table compatibility views.</span>
+          </div>
+          <div style="padding:8px 12px; background:rgba(74,222,128,0.07); border:1px solid rgba(74,222,128,0.2); border-radius:5px; line-height:1.5;">
+            <strong>Any MegaBro-specific API contracts</strong><br>
+            <span style="color:var(--text-dim);">Beta. Break freely. No production users depend on these.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </div>
 
   <div style="margin-bottom:24px; padding:14px; background:rgba(108,140,255,0.08); border:1px solid rgba(108,140,255,0.2); border-radius:8px;">
@@ -5773,7 +5872,7 @@ const _UNUSED = [
     desc: 'CLS schema evolution: PI at RFQLI level — PI currently has oli_id, needs rfqli_id (or managed relationship). 1:1 PI↔RFQLI.',
     owner: 'Finn', blockedBy: null, status: 'planned',
     entities: ['PlacementIntent', 'RFQLineItem'],
-    note: 'Critical design decision. PI.oli_id may remain for backward compat while adding rfqli_id.'
+    note: 'Critical design decision. PI.oli_id may remain during migration sequencing (not for external compat — BB/MegaBro have no backwards-compat requirement here). Add rfqli_id first, then drop oli_id in a follow-on migration once all PI creation paths write rfqli_id.'
   },
   {
     ticket: 'TBD', priority: 'Low', category: 'integration',
@@ -7810,13 +7909,13 @@ const ENG_TODOS = [
   },
   {
     phase: 1, seq: 8,
-    title: 'PI → RFQLI status derivation',
-    desc: 'RFQLI.status becomes a materialized view of PI.status. No separate RFQLI state machine. The RFQLI column is kept for backward compatibility and dashboard display but is never independently transitioned. Derivation table: submitted→pending, under_review→under_review, quote_received→quoted, declined→declined, etc.',
+    title: 'PI → RFQLI status derivation (then drop RFQLI.status)',
+    desc: 'RFQLI.status becomes a materialized derivation from PI.status, then is dropped entirely. No separate RFQLI state machine. No backwards-compat requirement — BigBrother never reads RFQLI.status from the DB (it only calls Agora proxy endpoints). MegaBro is beta. Plan: (1) materialize RFQLI.status from PI during transition period, (2) drop RFQLI.status column once PI v2 is the stable source of truth. Derivation table: submitted→pending, under_review→under_review, quote_received→quoted, declined→declined, etc.',
     services: ['CLS'],
     ticket: null,
     priority: 'High',
     status: 'Not Started',
-    notes: 'Core design decision from 2026-03-25 sync. RFQLI materialization table documented in PI v2 tab. CLS may need rfqli_id added to PI entity for 1:1 link.',
+    notes: 'Core design decision from 2026-03-25 sync. RFQLI materialization table documented in PI v2 tab. CLS may need rfqli_id added to PI entity for 1:1 link. Backwards compat analysis confirmed: BB reads nothing from RFQLI.status directly (see cls-sync.ts — only callAgora calls). Column can be dropped aggressively.',
   },
   {
     phase: 1, seq: 9,
@@ -8074,12 +8173,12 @@ const ENG_TODOS = [
   {
     phase: 7, seq: 32,
     title: 'Deprecate legacy InstantQuote entity',
-    desc: 'Migrate from insurance.instant_quote (Migration 018 standalone sidecar) to the RFQ system with channel=instant_quote. Legacy entity is not connected to Process Manager, RFQ system, or PlacementIntent. BigBrother IQ kanban currently uses it.',
+    desc: 'Migrate from insurance.instant_quote (Migration 018 standalone sidecar) to the RFQ system with channel=instant_quote. Legacy entity is not connected to Process Manager, RFQ system, or PlacementIntent. BigBrother IQ kanban currently uses it — but BigBrother is being deprecated and is NOT a backwards-compat constraint here. No production users depend on insurance.instant_quote (0 rows). Drop aggressively once PI v2 + RFQ channel consolidation is complete.',
     services: ['CLS', 'BigBrother', 'MegaBro'],
     ticket: null,
     priority: 'Low',
     status: 'Not Started',
-    notes: 'BigBrother is being deprecated — coordinate to sunset IQ kanban alongside legacy entity. Full deprecation analysis in Instant Quotes tab ("Should InstantQuote Entity Be Deprecated?" section). insurance.instant_quote has 0 rows in production. PI v2 + RFQ channel=instant_quote fully supersedes the IQ entity and its state machine.',
+    notes: 'No backwards-compat obligation: BB is deprecated, MegaBro is beta, insurance.instant_quote has 0 rows in production. Full deprecation analysis in Instant Quotes tab. PI v2 + RFQ channel=instant_quote fully supersedes the IQ entity and its state machine. Can drop without migration period.',
   },
   {
     phase: 7, seq: 33,
@@ -8373,6 +8472,343 @@ const ENG_TODOS = [
   });
 
   refresh();
+})();
+
+// ─── Understanding Intents Tab ───
+(function renderIntentsTab() {
+  const container = document.getElementById('intents-content');
+  if (!container) return;
+
+  const sectionStyle = 'max-width:900px; margin-bottom:48px;';
+  const headingStyle = 'font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--accent); margin-bottom:16px;';
+  const cardStyle = 'background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:28px 32px; margin-bottom:16px;';
+  const textStyle = 'font-size:14px; line-height:1.8; color:var(--text);';
+  const dimTextStyle = 'font-size:13px; line-height:1.7; color:var(--text-dim);';
+  const labelStyle = 'font-size:12px; font-weight:600; color:var(--purple); margin-bottom:6px;';
+
+  container.innerHTML = `
+    <!-- Hero -->
+    <div style="max-width:900px; margin-bottom:44px; padding:36px; background:linear-gradient(135deg, rgba(108,140,255,0.08) 0%, rgba(167,139,250,0.06) 100%); border:1px solid rgba(108,140,255,0.25); border-radius:12px;">
+      <div style="${headingStyle}">Understanding Intents</div>
+      <p style="font-size:16px; line-height:1.7; color:var(--text); font-weight:400;">
+        A conceptual guide to the <strong style="color:var(--accent);">Intent pattern</strong> used across Harper's CRM &mdash;
+        grounded in analogies to well-known financial services APIs (especially Stripe) from which Finn Lancaster took inspiration.
+      </p>
+    </div>
+
+    <!-- Section 1: What is an Intent? -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">1 &middot; What is an Intent?</div>
+      <div style="${cardStyle}">
+        <p style="${textStyle}; margin-bottom:16px;">
+          An Intent in Harper's CRM is a <strong style="color:var(--green);">declarative representation of a desired outcome</strong> &mdash;
+          not a record of what happened, but a statement of what we're trying to accomplish and where we are in accomplishing it.
+          It has a lifecycle (state machine), it can succeed or fail, and it coordinates the work needed to reach its goal.
+        </p>
+        <div style="padding:20px 24px; background:rgba(108,140,255,0.06); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; margin-top:12px;">
+          <p style="font-size:14px; line-height:1.7; color:var(--text); font-style:italic;">
+            The key insight: <strong style="color:var(--accent);">Intents separate "what we want" from "how we get there."</strong>
+            The state machine tracks progress toward the goal. The work items, signals, and side effects are implementation details.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Stripe's Intent Pattern -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">2 &middot; Stripe's Intent Pattern &mdash; The Inspiration</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+        <!-- Stripe PaymentIntent -->
+        <div style="${cardStyle} border-top:3px solid var(--purple);">
+          <div style="${labelStyle}">Stripe PaymentIntent</div>
+          <p style="${dimTextStyle}; margin-bottom:12px;">Created when a customer wants to pay.</p>
+          <ul style="${dimTextStyle}; padding-left:18px; list-style:disc;">
+            <li>Tracks the payment lifecycle: <code style="color:var(--yellow); font-size:12px;">requires_payment_method &rarr; requires_confirmation &rarr; requires_action &rarr; processing &rarr; succeeded / canceled</code></li>
+            <li style="margin-top:6px;">The PaymentIntent doesn't send money &mdash; it coordinates the steps needed to complete a payment</li>
+            <li style="margin-top:6px;">External systems (3D Secure, bank transfers) can cause the intent to pause, wait, or fail</li>
+            <li style="margin-top:6px;">The merchant never directly manipulates the payment processor &mdash; they interact through the intent</li>
+          </ul>
+        </div>
+
+        <!-- Stripe SetupIntent -->
+        <div style="${cardStyle} border-top:3px solid var(--cyan);">
+          <div style="font-size:12px; font-weight:600; color:var(--cyan); margin-bottom:6px;">Stripe SetupIntent</div>
+          <p style="${dimTextStyle}; margin-bottom:12px;">Created when a customer wants to save a payment method for later.</p>
+          <ul style="${dimTextStyle}; padding-left:18px; list-style:disc;">
+            <li>Similar lifecycle but optimized for setup rather than immediate payment</li>
+            <li style="margin-top:6px;">Separates "I want to save this card" from the mechanics of tokenization and verification</li>
+          </ul>
+        </div>
+
+        <!-- Stripe SubscriptionSchedule -->
+        <div style="${cardStyle} border-top:3px solid var(--orange); grid-column: 1 / -1;">
+          <div style="font-size:12px; font-weight:600; color:var(--orange); margin-bottom:6px;">Stripe SubscriptionSchedule</div>
+          <p style="${dimTextStyle};">
+            Declarative: "I want this subscription to change on this date." The system figures out the proration, billing, and execution.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Harper's Intent Ecosystem -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">3 &middot; Harper's Intent Ecosystem &mdash; The Parallels</div>
+
+      <!-- Visual hierarchy: CoverageIntent at top, children below -->
+      <div style="margin-bottom:24px; text-align:center;">
+        <div style="display:inline-block; padding:14px 28px; background:linear-gradient(135deg, rgba(108,140,255,0.15), rgba(167,139,250,0.12)); border:2px solid var(--accent); border-radius:10px; font-size:14px; font-weight:700; color:var(--accent);">
+          CoverageIntent
+        </div>
+        <div style="color:var(--text-dim); font-size:18px; margin:8px 0;">&#9660;</div>
+        <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
+          <div style="padding:10px 18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--green); font-weight:600;">IntakeWorkflow</div>
+          <div style="padding:10px 18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--yellow); font-weight:600;">SubmissionIntent</div>
+          <div style="padding:10px 18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--orange); font-weight:600;">PlacementIntent</div>
+          <div style="padding:10px 18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--red); font-weight:600;">BindingIntent</div>
+          <div style="padding:10px 18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--purple); font-weight:600;">RenewalIntent</div>
+        </div>
+      </div>
+
+      <!-- Mapping table -->
+      <div style="${cardStyle} overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left; padding:10px 12px; color:var(--accent); font-weight:700;">Harper Intent</th>
+              <th style="text-align:left; padding:10px 12px; color:var(--purple); font-weight:700;">Stripe Analog</th>
+              <th style="text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:700;">Goal</th>
+              <th style="text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:700;">Lifecycle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px; font-weight:600; color:var(--accent);">CoverageIntent</td>
+              <td style="padding:10px 12px; color:var(--purple);">SubscriptionSchedule</td>
+              <td style="padding:10px 12px; color:var(--text-dim);">"Get this coverage placed and bound"</td>
+              <td style="padding:10px 12px;"><code style="font-size:11px; color:var(--yellow);">intake &rarr; submission &rarr; placement &rarr; sales &rarr; binding &rarr; service</code></td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px; font-weight:600; color:var(--yellow);">SubmissionIntent</td>
+              <td style="padding:10px 12px; color:var(--purple);">PaymentIntent (phase 1)</td>
+              <td style="padding:10px 12px; color:var(--text-dim);">"Build and dispatch a submission packet"</td>
+              <td style="padding:10px 12px;"><code style="font-size:11px; color:var(--yellow);">preparing &rarr; packet_ready &rarr; submitted</code></td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px; font-weight:600; color:var(--orange);">PlacementIntent</td>
+              <td style="padding:10px 12px; color:var(--purple);">PaymentIntent (phase 2)</td>
+              <td style="padding:10px 12px; color:var(--text-dim);">"Get a quote from this carrier"</td>
+              <td style="padding:10px 12px;"><code style="font-size:11px; color:var(--yellow);">submitted &rarr; under_review &rarr; quote_received &rarr; approved_quote</code></td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px; font-weight:600; color:var(--red);">BindingIntent</td>
+              <td style="padding:10px 12px; color:var(--purple);">PaymentIntent (phase 3)</td>
+              <td style="padding:10px 12px; color:var(--text-dim);">"Bind this coverage with the carrier"</td>
+              <td style="padding:10px 12px;"><code style="font-size:11px; color:var(--yellow);">collecting_subjectivities &rarr; awaiting_signatures &rarr; bound</code></td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px; font-weight:600; color:var(--green);">IntakeWorkflow</td>
+              <td style="padding:10px 12px; color:var(--purple);">SetupIntent</td>
+              <td style="padding:10px 12px; color:var(--text-dim);">"Collect all the data we need"</td>
+              <td style="padding:10px 12px;"><code style="font-size:11px; color:var(--yellow);">collecting &rarr; reviewing &rarr; ready</code></td>
+            </tr>
+            <tr>
+              <td style="padding:10px 12px; font-weight:600; color:var(--purple);">RenewalIntent</td>
+              <td style="padding:10px 12px; color:var(--purple);">Subscription renewal</td>
+              <td style="padding:10px 12px; color:var(--text-dim);">"Renew this expiring policy"</td>
+              <td style="padding:10px 12px;"><code style="font-size:11px; color:var(--yellow);">upcoming &rarr; contacted &rarr; handed_off &rarr; bound</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section 4: Why Intents, Not Just Status Fields? -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">4 &middot; Why Intents, Not Just Status Fields?</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+        <div style="${cardStyle}">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:rgba(108,140,255,0.12); color:var(--accent); font-weight:700; font-size:14px;">1</span>
+            <span style="font-size:13px; font-weight:600; color:var(--text);">First-class entities, not status columns</span>
+          </div>
+          <p style="${dimTextStyle}">
+            A PlacementIntent has its own ID, timestamps, history, and relationships &mdash;
+            it's not just a <code style="color:var(--yellow);">status</code> field on an RFQ. This means you can have
+            <strong style="color:var(--text);">multiple</strong> placement intents for the same coverage (remarketing creates new ones).
+          </p>
+        </div>
+
+        <div style="${cardStyle}">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:rgba(108,140,255,0.12); color:var(--accent); font-weight:700; font-size:14px;">2</span>
+            <span style="font-size:13px; font-weight:600; color:var(--text);">The Phoenix pattern</span>
+          </div>
+          <p style="${dimTextStyle}">
+            When an intent fails (declined, rework, remarketing), the old intent is preserved as history and a new one rises.
+            Like Stripe's <code style="color:var(--purple);">PaymentIntent</code> &mdash; if a payment fails, you don't mutate the failed intent; you create a new one.
+            The failed one is your audit trail.
+          </p>
+        </div>
+
+        <div style="${cardStyle}">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:rgba(108,140,255,0.12); color:var(--accent); font-weight:700; font-size:14px;">3</span>
+            <span style="font-size:13px; font-weight:600; color:var(--text);">Decoupled coordination from execution</span>
+          </div>
+          <p style="${dimTextStyle}">
+            The PlacementIntent doesn't send emails or parse quotes &mdash; it coordinates the state.
+            Harper-claw sends emails. CASHMONEY parses quotes. The intent just tracks
+            "where are we in getting a quote from this carrier?"
+            Just like Stripe's PaymentIntent doesn't move money &mdash; the payment processor does.
+          </p>
+        </div>
+
+        <div style="${cardStyle}">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:rgba(108,140,255,0.12); color:var(--accent); font-weight:700; font-size:14px;">4</span>
+            <span style="font-size:13px; font-weight:600; color:var(--text);">Clear ownership boundaries</span>
+          </div>
+          <p style="${dimTextStyle}">
+            CoverageIntent is the parent coordinator. SubmissionIntent owns "get it to market."
+            PlacementIntent owns "get a quote back." BindingIntent owns "close the deal."
+            Each intent is managed by a different service or team.
+            Like Stripe separates PaymentIntents from Subscriptions from Invoices.
+          </p>
+        </div>
+
+        <div style="${cardStyle} grid-column: 1 / -1;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:rgba(108,140,255,0.12); color:var(--accent); font-weight:700; font-size:14px;">5</span>
+            <span style="font-size:13px; font-weight:600; color:var(--text);">Composable state machines</span>
+          </div>
+          <p style="${dimTextStyle}">
+            The CoverageIntent's phase-level machine
+            (<code style="color:var(--yellow);">intake &rarr; submission &rarr; placement &rarr; sales &rarr; binding &rarr; service</code>)
+            delegates to child intents. Each child has its own detailed state machine.
+            This is like Stripe's <code style="color:var(--purple);">Subscription &rarr; Invoice &rarr; PaymentIntent</code> chain.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 5: The Process Manager -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">5 &middot; The Process Manager &mdash; Harper's "Webhook Handler"</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+        <div style="${cardStyle} border-top:3px solid var(--accent);">
+          <div style="font-size:12px; font-weight:600; color:var(--accent); margin-bottom:10px;">Harper: IntentLifecycleProcess</div>
+          <ul style="${dimTextStyle}; padding-left:18px; list-style:disc;">
+            <li>When a child intent reaches a terminal state, the PM auto-advances the parent CoverageIntent</li>
+            <li style="margin-top:8px;">When a child intent needs to backtrack, the PM backtracks the parent</li>
+            <li style="margin-top:8px;">When a child intent fails, the PM sets the outcome on the parent</li>
+          </ul>
+        </div>
+
+        <div style="${cardStyle} border-top:3px solid var(--purple);">
+          <div style="font-size:12px; font-weight:600; color:var(--purple); margin-bottom:10px;">Stripe: Webhooks + Auto-finalization</div>
+          <ul style="${dimTextStyle}; padding-left:18px; list-style:disc;">
+            <li>Webhooks tell your app when a PaymentIntent changes state</li>
+            <li style="margin-top:8px;">Automatic invoice finalization when a subscription period ends</li>
+            <li style="margin-top:8px;">The system reacts to state changes and cascades them</li>
+          </ul>
+        </div>
+      </div>
+      <div style="padding:20px 24px; background:rgba(108,140,255,0.06); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; margin-top:16px; max-width:900px;">
+        <p style="${dimTextStyle}; font-style:italic;">
+          The Process Manager is the internal equivalent of Stripe's webhook system &mdash;
+          it observes state transitions in child intents and cascades them upward to the parent CoverageIntent.
+        </p>
+      </div>
+    </div>
+
+    <!-- Section 6: Intents Across Harper's Verticals -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">6 &middot; Intents Across Harper's Verticals</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+        <div style="${cardStyle} border-left:3px solid var(--accent);">
+          <div style="font-size:12px; font-weight:700; color:var(--accent); margin-bottom:4px;">Submissions Vertical (Pod 2)</div>
+          <p style="${dimTextStyle}; margin-bottom:6px;">CoverageIntent &rarr; SubmissionIntent &rarr; PlacementIntent</p>
+          <p style="font-size:12px; color:var(--text-dim); font-style:italic;">"Get this coverage quoted and placed"</p>
+        </div>
+
+        <div style="${cardStyle} border-left:3px solid var(--yellow);">
+          <div style="font-size:12px; font-weight:700; color:var(--yellow); margin-bottom:4px;">Sales Vertical (CASHMONEY / Antares)</div>
+          <p style="${dimTextStyle}; margin-bottom:6px;">Quote &rarr; Invoice &rarr; Order &rarr; OrderProduct</p>
+          <p style="font-size:12px; color:var(--text-dim); font-style:italic;">"Convert this quote into a paying customer"</p>
+        </div>
+
+        <div style="${cardStyle} border-left:3px solid var(--red);">
+          <div style="font-size:12px; font-weight:700; color:var(--red); margin-bottom:4px;">Binding Vertical</div>
+          <p style="${dimTextStyle}; margin-bottom:6px;">BindingIntent</p>
+          <p style="font-size:12px; color:var(--text-dim); font-style:italic;">"Execute the bind with the carrier"</p>
+        </div>
+
+        <div style="${cardStyle} border-left:3px solid var(--purple);">
+          <div style="font-size:12px; font-weight:700; color:var(--purple); margin-bottom:4px;">Servicing Vertical</div>
+          <p style="${dimTextStyle}; margin-bottom:6px;">RenewalIntent &bull; Policy &rarr; Endorsement &rarr; Cancellation (future intents)</p>
+          <p style="font-size:12px; color:var(--text-dim); font-style:italic;">"Renew this expiring policy"</p>
+        </div>
+
+        <div style="${cardStyle} border-left:3px solid var(--green); grid-column: 1 / -1;">
+          <div style="font-size:12px; font-weight:700; color:var(--green); margin-bottom:4px;">Intake Vertical (Dumbly)</div>
+          <p style="${dimTextStyle}; margin-bottom:6px;">IntakeWorkflow</p>
+          <p style="font-size:12px; color:var(--text-dim); font-style:italic;">"Collect all required application data"</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 7: Key Design Principles -->
+    <div style="${sectionStyle}">
+      <div style="${headingStyle}">7 &middot; Key Design Principles (from Finn)</div>
+      <div style="display:grid; grid-template-columns:1fr; gap:14px;">
+
+        <div style="${cardStyle} display:flex; align-items:flex-start; gap:16px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; border-radius:10px; background:rgba(74,222,128,0.1); border:1px solid rgba(74,222,128,0.25); color:var(--green); font-weight:700; font-size:16px;">I</span>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px;">Intents are immutable once terminal</div>
+            <p style="${dimTextStyle}">Like a Stripe charge &mdash; once succeeded or failed, create a new one. Never mutate a terminal intent.</p>
+          </div>
+        </div>
+
+        <div style="${cardStyle} display:flex; align-items:flex-start; gap:16px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; border-radius:10px; background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.25); color:var(--yellow); font-weight:700; font-size:16px;">II</span>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px;">Status derives downward, outcomes propagate upward</div>
+            <p style="${dimTextStyle}">RFQLI status derives from PI. PI outcome propagates to CoverageIntent. The flow is always clear.</p>
+          </div>
+        </div>
+
+        <div style="${cardStyle} display:flex; align-items:flex-start; gap:16px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; border-radius:10px; background:rgba(108,140,255,0.1); border:1px solid rgba(108,140,255,0.25); color:var(--accent); font-weight:700; font-size:16px;">III</span>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px;">The Process Manager is the glue</div>
+            <p style="${dimTextStyle}">It reacts to transitions and cascades them. Services don't need to know about each other.</p>
+          </div>
+        </div>
+
+        <div style="${cardStyle} display:flex; align-items:flex-start; gap:16px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; border-radius:10px; background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.25); color:var(--purple); font-weight:700; font-size:16px;">IV</span>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px;">SLA and assignment live on the entity, not on tasks</div>
+            <p style="${dimTextStyle}">The intent itself knows who owns it and when it's due. Ownership is structural, not incidental.</p>
+          </div>
+        </div>
+
+        <div style="${cardStyle} display:flex; align-items:flex-start; gap:16px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; border-radius:10px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.25); color:var(--red); font-weight:700; font-size:16px;">V</span>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px;">Work items are adhoc operator actions, not state proxies</div>
+            <p style="${dimTextStyle}">The intent's state machine IS the state. Work items are "things a human chose to do" &mdash; they don't drive the lifecycle.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  `;
 })();
 
 </script>
