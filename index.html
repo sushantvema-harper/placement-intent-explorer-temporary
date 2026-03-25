@@ -1263,7 +1263,7 @@
       <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Validates coverage lines against OLIs (domain.ValidateQuoteAgainstOLIs)</div>
       <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Handles invoice creation, PFA generation, order creation</div>
       <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Emits antares.* signals to Son of Atlas/MiniOrq via Relay</div>
-      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Consumes zephyrus.sales.* events from relay.zephyrus topic</div>
+      <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Consumes zephyrus.sales.* events from relay.comms topic (via ZephyrusPoller — name is misleading, actually subscribes to relay.comms)</div>
       <div style="padding:4px 0; border-bottom:1px solid rgba(45,51,72,0.3);">Does NOT touch PlacementIntent — that is Agora's domain</div>
     </div>
     <div style="font-size:12px; font-weight:700; color:var(--cyan); margin-top:16px; margin-bottom:8px;">Key Signals Emitted (antares.*)</div>
@@ -4988,7 +4988,7 @@ const MINIORQ_ARCH_LAYERS = [
     items: [
       'Bronze→Silver email processing',
       'Hermes classification (INSURANCE_QUOTE, DECLINE, etc.)',
-      'Emits to relay.zephyrus topic',
+      'Emits to relay.comms topic (email/comms events)',
       'zephyrus.sales.quote_received, etc.'
     ]
   },
@@ -4996,7 +4996,7 @@ const MINIORQ_ARCH_LAYERS = [
     title: 'CASHMONEY / Antares (Sales Service)',
     color: 'var(--cyan)',
     items: [
-      'Consumes relay.zephyrus events',
+      'Consumes relay.comms events (via ZephyrusPoller — misleadingly named)',
       'Quote materialization (POST /quotes)',
       'OLI resolution + RFQMatcher',
       'RFQLI transitions (POST /rfq-items/{id}/transition)',
@@ -5043,10 +5043,10 @@ const MINIORQ_SIGNALS = [
   },
   {
     id: 'relay-zephyrus',
-    title: 'Relay relay.zephyrus topic',
+    title: 'Relay relay.comms topic',
     subtitle: 'Zephyrus → CASHMONEY',
     color: 'var(--purple)',
-    summary: 'Zephyrus processes inbound emails through its Bronze→Silver pipeline and emits sales-related events to relay.zephyrus. CASHMONEY (not Agora) consumes these.',
+    summary: 'Zephyrus processes inbound emails through its Bronze→Silver pipeline and emits sales-related events to relay.comms (comms.email, comms.phone_call, etc.). CASHMONEY\'s ZephyrusPoller — misleadingly named — actually subscribes to relay.comms and relay.lifecycle, not a relay.zephyrus topic (which does not exist in production). CASHMONEY (not Agora) consumes these.',
     details: [
       { label: 'Events', value: 'zephyrus.sales.quote_received, zephyrus.sales.decline_received, zephyrus.sales.info_requested' },
       { label: 'Consumer', value: 'CASHMONEY / Antares (NOT Agora — Agora consumes lifecycle events downstream)' },
@@ -5103,8 +5103,8 @@ const MINIORQ_FLOWS = [
       { num: 1, text: 'Email arrives in Gmail from carrier underwriter', type: 'external' },
       { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email (extraction, enrichment)', type: 'external' },
       { num: 3, text: 'Hermes classifies email: INSURANCE_QUOTE', type: 'external' },
-      { num: 4, text: 'Zephyrus emits to Relay: zephyrus.sales.quote_received on relay.zephyrus topic', type: 'relay' },
-      { num: 5, text: 'CASHMONEY consumes event from relay.zephyrus topic', type: 'internal' },
+      { num: 4, text: 'Zephyrus emits to Relay: zephyrus.sales.quote_received on relay.comms topic', type: 'relay' },
+      { num: 5, text: 'CASHMONEY ZephyrusPoller consumes event from relay.comms topic (poller name is misleading — subscribes to relay.comms)', type: 'internal' },
       { num: 6, text: 'CASHMONEY calls Aether to extract quote details from artifact', type: 'internal' },
       { num: 7, text: 'CASHMONEY validates coverage lines against OLIs (domain.ValidateQuoteAgainstOLIs)', type: 'internal' },
       { num: 8, text: 'CASHMONEY creates Quote in CLS: POST /quotes {account_id, opportunity_id, coverage_lines, ...}', type: 'cls' },
@@ -5125,7 +5125,7 @@ const MINIORQ_FLOWS = [
       { num: 1, text: 'Email arrives in Gmail — carrier decline notice', type: 'external' },
       { num: 2, text: 'Zephyrus Bronze→Silver pipeline processes email', type: 'external' },
       { num: 3, text: 'Hermes classifies email: INSURANCE_DECLINE', type: 'external' },
-      { num: 4, text: 'Zephyrus emits to Relay: zephyrus.sales.decline_received on relay.zephyrus topic', type: 'relay' },
+      { num: 4, text: 'Zephyrus emits to Relay: zephyrus.sales.decline_received on relay.comms topic', type: 'relay' },
       { num: 5, text: 'CASHMONEY or Agora consumes event (TBD — decline may not go through CASHMONEY)', type: 'internal' },
       { num: 6, text: 'RFQLI transition: POST /rfq-items/{id}/transition {status: "declined", declination_category: "..."}', type: 'cls' },
       { num: 7, text: 'CLS emits lifecycle.entity.transitioned event to relay.lifecycle', type: 'relay' },
@@ -5195,11 +5195,24 @@ const MINIORQ_CLS_APIS = [
   { api: 'Get Intents', method: 'GET', endpoint: '/opportunities/{opp_id}/intents', when: 'Coverage Intent lookup for process manager', caller: 'Agora' }
 ];
 
+// Real production Relay topics (11 total): relay.agents, relay.analytics, relay.commands,
+// relay.comms, relay.composite, relay.intake, relay.leads, relay.lifecycle,
+// relay.submissions, relay.system, relay.tasks
+// NOTE: relay.zephyrus does NOT exist in production. CASHMONEY's ZephyrusPoller is
+// misleadingly named — it actually subscribes to relay.comms and relay.lifecycle.
 const MINIORQ_RELAY_TOPICS = [
   { topic: 'relay.lifecycle', direction: 'CLS → Agora / MiniOrq', events: 'lifecycle.entity.transitioned (RFQLI, Quote, PI)', consumer: 'agora-consumer' },
-  { topic: 'relay.zephyrus', direction: 'Zephyrus → CASHMONEY', events: 'zephyrus.sales.quote_received, zephyrus.sales.decline_received', consumer: 'cashmoney-consumer' },
+  { topic: 'relay.comms', direction: 'Zephyrus → CASHMONEY', events: 'comms.email, comms.phone_call, etc. (includes zephyrus.sales.quote_received, zephyrus.sales.decline_received). NOTE: relay.zephyrus does NOT exist — this is the real topic.', consumer: 'cashmoney-consumer (via ZephyrusPoller — name is misleading; subscribes to relay.comms + relay.lifecycle)' },
   { topic: 'relay.sales', direction: 'CASHMONEY → Son of Atlas / MiniOrq', events: 'antares.coverage.selected, antares.invoice.*', consumer: 'agora-consumer / sonatlas-consumer' },
   { topic: 'relay.submissions', direction: 'Agora → consumers', events: 'submissions.packet.*', consumer: 'various' },
+  { topic: 'relay.intake', direction: 'Intake services → consumers', events: 'intake.* events', consumer: 'various' },
+  { topic: 'relay.leads', direction: 'Lead services → consumers', events: 'leads.* events', consumer: 'various' },
+  { topic: 'relay.agents', direction: 'Agent services → consumers', events: 'agents.* events', consumer: 'various' },
+  { topic: 'relay.analytics', direction: 'Analytics → consumers', events: 'analytics.* events', consumer: 'various' },
+  { topic: 'relay.commands', direction: 'Command bus', events: 'commands.* events', consumer: 'various' },
+  { topic: 'relay.composite', direction: 'Composite events', events: 'composite.* events', consumer: 'various' },
+  { topic: 'relay.system', direction: 'System events', events: 'system.* events', consumer: 'various' },
+  { topic: 'relay.tasks', direction: 'Task events', events: 'tasks.* events', consumer: 'various' },
   { topic: 'comms.placement', direction: 'Zephyrus → Agora (directly)', events: 'SUBMISSION_TO_QUOTE (info requests — placement-level, not sales-level)', consumer: 'agora-consumer' },
   { topic: 'TBD (placement signals)', direction: 'Harper-claw → Agora', events: 'placement.quote_received, placement.quote_declined', consumer: 'TBD' }
 ];
