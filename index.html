@@ -849,6 +849,109 @@
       <tbody id="piv2-mat-body"></tbody>
     </table>
   </div>
+
+  <!-- ─── Phoenix Patterns ─── -->
+  <div style="margin-top:40px;">
+    <h3 style="font-size:14px; margin-bottom:6px; color:var(--accent);">Phoenix Patterns: When to Create New vs Update</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:6px; line-height:1.6;">
+      The <strong style="color:var(--green);">Phoenix Rule</strong>: once a PI reaches a terminal state, recovery
+      <em>always</em> creates a new entity. The old PI remains as an immutable audit record. New entities
+      reference prior ones via linkage fields (e.g., <code>prior_si_id</code> on SubmissionIntent).
+      In-place updates are only valid while a PI is still in a non-terminal state.
+    </p>
+    <p style="font-size:10px; color:var(--text-dim); margin-bottom:16px; font-style:italic;">
+      Color coding: <span style="color:var(--green); font-weight:600;">green = create new (phoenix)</span> &nbsp;|&nbsp;
+      <span style="color:var(--yellow); font-weight:600;">yellow = update in place</span> &nbsp;|&nbsp;
+      <span style="color:var(--cyan); font-weight:600;">blue = mixed / context-dependent</span>
+    </p>
+
+    <!-- Decision matrix table -->
+    <div style="overflow-x:auto; margin-bottom:24px;">
+      <table class="rules-table" style="max-width:1100px; font-size:11px;">
+        <thead>
+          <tr>
+            <th style="min-width:140px;">Scenario</th>
+            <th style="min-width:130px;">Old PI Fate</th>
+            <th style="min-width:100px;">New PI Created?</th>
+            <th style="min-width:160px;">Linkage</th>
+            <th style="min-width:180px;">MegaBro Display</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span style="color:var(--green); font-weight:600;">1. Remarketing</span><br><span style="color:var(--text-dim);">All PIs declined, operator re-markets to new carriers</span></td>
+            <td><span style="background:rgba(248,113,113,0.15); color:var(--red); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">terminal: declined/remarketing</span><br><span style="color:var(--text-dim);">Immutable history. Old RFQs left as-is or soft-withdrawn.</span></td>
+            <td style="color:var(--green); font-weight:600; text-align:center;">YES</td>
+            <td><code style="font-size:10px;">SI.prior_si_id</code> → original SI<br><span style="color:var(--text-dim);">New SI (type=remarketing), new RFQ → new RFQLI → new PI per new carrier</span></td>
+            <td>Shows "Remarketing attempt #N" badge. History of prior attempts collapsible per OLI.</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--green); font-weight:600;">2. Rework</span><br><span style="color:var(--text-dim);">Defective packet — wrong docs, wrong entity</span></td>
+            <td><span style="background:rgba(248,113,113,0.15); color:var(--red); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">terminal: rework</span><br><span style="color:var(--text-dim);">PI frozen. Old RFQ to same carrier remains (not withdrawn — same UW relationship).</span></td>
+            <td style="color:var(--green); font-weight:600; text-align:center;">YES</td>
+            <td><code style="font-size:10px;">SI.prior_si_id</code> → original SI<br><span style="color:var(--text-dim);">New SI, new RFQ to same carrier, new RFQLI, new PI. Same UW context but fresh packet.</span></td>
+            <td>Shows "Rework" badge on old PI. New PI linked to same carrier — operator sees both attempts side-by-side.</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--cyan); font-weight:600;">3. Quote Rework</span><br><span style="color:var(--text-dim);">disqualified_quote → retry same carrier</span></td>
+            <td><span style="background:rgba(248,113,113,0.15); color:var(--red); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">terminal: disqualified_quote</span><br><span style="color:var(--text-dim);">Old PI frozen at disqualified_quote.</span></td>
+            <td style="color:var(--cyan); font-weight:600; text-align:center;">YES (lean phoenix)</td>
+            <td><code style="font-size:10px;">PI.prior_pi_id</code> (TBD) or metadata link<br><span style="color:var(--text-dim);">New PI to same carrier, same RFQLI or new RFQLI. No new SI required — same submission, just bad quote data.</span></td>
+            <td>Shows "Quote retry" badge. Old disqualified quote visible in quote history. Distinct from remarketing (same carrier, same coverage).</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--green); font-weight:600;">4. Unsolicited Coverage</span><br><span style="color:var(--text-dim);">Carrier quotes GL + Cyber when only GL requested</span></td>
+            <td><span style="background:rgba(74,222,128,0.15); color:var(--green); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">unchanged (active)</span><br><span style="color:var(--text-dim);">Original GL PI continues normally.</span></td>
+            <td style="color:var(--green); font-weight:600; text-align:center;">YES (for new coverage)</td>
+            <td><code style="font-size:10px;">is_synthetic=true</code> on new RFQLI<br><span style="color:var(--text-dim);">New RFQLI created for unsolicited Cyber. New PI if OLI exists for Cyber. If no OLI, CASHMONEY creates synthetic RFQ — PI creation is deferred to operator review.</span></td>
+            <td>Unsolicited coverage surfaced as "Unsolicited quote — review" work item. Operator decides whether to pursue or dismiss.</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--yellow); font-weight:600;">5. Revised Quote</span><br><span style="color:var(--text-dim);">Customer says too expensive, carrier revises ($12k → $9.5k)</span></td>
+            <td><span style="background:rgba(251,191,36,0.15); color:var(--yellow); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">stays at quote_received</span><br><span style="color:var(--text-dim);">PI does NOT change state. Same carrier relationship.</span></td>
+            <td style="color:var(--yellow); font-weight:600; text-align:center;">NO</td>
+            <td>New <strong>Quote entity</strong> linked to same RFQLI. Previous Quote entity preserved as history.<br><span style="color:var(--text-dim);">PI tracks the carrier relationship (the placement), not the individual quote document.</span></td>
+            <td>Quote history shows multiple quote versions on same PI. Most recent quote highlighted. Operator can compare.</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--cyan); font-weight:600;">6. Split Submission</span><br><span style="color:var(--text-dim);">Carrier does GL but not WC/PL</span></td>
+            <td><span style="background:rgba(74,222,128,0.15); color:var(--green); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">GL PI continues, WC/PL PI → declined</span><br><span style="color:var(--text-dim);">Normal "some quoted, some declined" flow. Not a phoenix event by default.</span></td>
+            <td style="color:var(--cyan); font-weight:600; text-align:center;">MIXED</td>
+            <td>Each RFQLI has its own PI. GL PI proceeds to quote_received. WC/PL PI transitions to declined.<br><span style="color:var(--text-dim);">If remarketing WC/PL to other carriers, then phoenix applies (new RFQLI → new PI for WC/PL elsewhere).</span></td>
+            <td>OLI shows per-coverage status. GL "quoted", WC/PL "declined — remarketing eligible".</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--green); font-weight:600;">7. Synthetic RFQ</span><br><span style="color:var(--text-dim);">Quote arrives with no matching RFQ (CASHMONEY creates synthetic)</span></td>
+            <td>N/A — no prior PI exists</td>
+            <td style="color:var(--green); font-weight:600; text-align:center;">YES (synthetic path)</td>
+            <td><code style="font-size:10px;">RFQ.is_synthetic=true</code><br><span style="color:var(--text-dim);">Synthetic RFQ + RFQLI created. PI created if OLI can be resolved. If OLI resolution fails, quote enters "orphan" queue for operator to manually link.</span></td>
+            <td>PI shows "synthetic" badge. Operator prompted to review and link to correct OLI before quote can be approved.</td>
+          </tr>
+          <tr>
+            <td><span style="color:var(--green); font-weight:600;">8. Portal Retry</span><br><span style="color:var(--text-dim);">Portal declined (appetite), operator fixes data + resubmits</span></td>
+            <td><span style="background:rgba(248,113,113,0.15); color:var(--red); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap;">terminal: declined</span><br><span style="color:var(--text-dim);">Old PI frozen. Portal declined = final answer from that portal session.</span></td>
+            <td style="color:var(--green); font-weight:600; text-align:center;">YES</td>
+            <td>New RFQ (same portal, updated application data) → new RFQLI → new PI.<br><span style="color:var(--text-dim);">Old PI.decline_reason = "appetite". New PI has corrected NAICS/revenue in application snapshot.</span></td>
+            <td>Shows portal retry history. Operator can see what data changed between attempts. Prior decline reason visible.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Key principle callout -->
+    <div style="padding:14px; background:rgba(108,140,255,0.08); border:1px solid rgba(108,140,255,0.25); border-left:4px solid var(--accent); border-radius:6px; max-width:900px; margin-bottom:16px;">
+      <div style="font-size:12px; font-weight:600; color:var(--accent); margin-bottom:6px;">The Phoenix Principle</div>
+      <p style="font-size:11px; color:var(--text); line-height:1.7; margin:0;">
+        <strong>PI is immutable once it reaches a terminal state.</strong>
+        Recovery always creates new entities — a new SubmissionIntent, new RFQ, new RFQLI, new PI.
+        The old PI becomes part of the audit trail: it records <em>what was tried, with whom, and why it ended</em>.
+        This is the "phoenix" pattern — the old entity dies, a new one rises from it, carrying a reference back to the original.<br><br>
+        <strong>Exception:</strong> When a PI is still in an active (non-terminal) state, updating in place is correct.
+        The clearest example: a revised quote from the same carrier doesn't reset the PI — it adds a new Quote entity
+        while the PI stays at <code>quote_received</code>. The PI tracks the carrier relationship; Quote tracks individual documents.
+      </p>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -1081,30 +1184,214 @@
     <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">RFQ Schema Status (Production vs Code)</h3>
     <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
       The CLS Go entity struct references columns that don't exist in any applied migration. Two separate table lineages coexist.
+      <strong>Updated 2026-03-25 with live production verification.</strong>
     </p>
-    <table class="rules-table" style="max-width:800px;">
-      <thead><tr><th>Field</th><th>In Go Entity?</th><th>In CLS Migration?</th><th>In MegaBro Script?</th><th>Status</th></tr></thead>
+    <table class="rules-table" style="max-width:900px;">
+      <thead><tr><th>Go Entity Field</th><th>Expected Table.Column</th><th>Exists in Prod?</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>id, opportunity_id, status, notes</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (028)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
-        <tr><td>idempotency_key</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (072)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
-        <tr><td>created_by</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (028)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
-        <tr><td>is_synthetic</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (081)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
-        <tr><td>channel</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
-        <tr><td>snapshot_underwriter_name</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--yellow);">In insurance.request_for_quote</td><td style="color:var(--yellow);">SPLIT</td></tr>
-        <tr><td>snapshot_carrier_name</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--yellow);">In insurance.request_for_quote</td><td style="color:var(--yellow);">SPLIT</td></tr>
-        <tr><td>portal_name, portal_url</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
-        <tr><td>assigned_to, assigned_type, assigned_at</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
-        <tr><td>cached_status</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
-        <tr><td>product_sku_id</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
-        <tr><td>submission_intent_id (on RFQ)</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No (only on RFQLI)</td><td style="color:var(--green);">Yes</td><td style="color:var(--yellow);">SPLIT</td></tr>
+        <tr><td>ID, Notes, SubmittedAt, CreatedAt, UpdatedAt</td><td>insurance.request_for_quote.*</td><td style="color:var(--green);">YES</td><td>Backfill lineage — live and populated (25,441 rows)</td></tr>
+        <tr><td>SubmissionIntentID</td><td>insurance.request_for_quote.submission_intent_id</td><td style="color:var(--green);">YES</td><td>Nullable BIGINT — present in backfill lineage table</td></tr>
+        <tr><td>UnderwriterID, UnderwriterName, UnderwriterEmail</td><td>insurance.request_for_quote.underwriter_*</td><td style="color:var(--green);">YES</td><td>Present in backfill lineage (underwriter_name = NOT NULL)</td></tr>
+        <tr><td>CarrierID, CarrierName, GroupID, GroupName</td><td>insurance.request_for_quote.carrier_*/group_*</td><td style="color:var(--green);">YES</td><td>Present in backfill lineage</td></tr>
+        <tr><td>IdempotencyKey</td><td>cpq.request_for_quote.idempotency_key</td><td style="color:var(--green);">YES</td><td>On CPQ layer (migration 072). cpq.rfq has 25,441 rows.</td></tr>
+        <tr><td>Channel</td><td>insurance.request_for_quote.channel <strong>OR</strong> cpq.request_for_quote.channel</td><td style="color:var(--red);">NO</td><td>Field exists in Go entity but in ZERO production columns. Neither backfill lineage nor CLS migration adds it.</td></tr>
+        <tr><td>SnapshotUnderwriterName, SnapshotUnderwriterEmail</td><td>insurance.request_for_quote.snapshot_underwriter_*</td><td style="color:var(--red);">NO</td><td>Go entity has snapshot_ prefix for immutable copies; prod only has underwriter_name (mutable). CLS migration 028 planned snapshot_ columns but never ran.</td></tr>
+        <tr><td>SnapshotCarrierName, SnapshotGroupName</td><td>insurance.request_for_quote.snapshot_carrier_name</td><td style="color:var(--red);">NO</td><td>Same — snapshot_ prefix columns absent from prod</td></tr>
+        <tr><td>PortalName, PortalURL</td><td>insurance.request_for_quote.portal_name / portal_url</td><td style="color:var(--red);">NO</td><td>Portal fields exist only on insurance.instant_quote (19 cols) — 0 rows in prod. No portal_* columns on request_for_quote.</td></tr>
+        <tr><td>AssignedTo, AssignedType, AssignedAt</td><td>insurance.request_for_quote.assigned_*</td><td style="color:var(--red);">NO</td><td>Absent from all production RFQ table variants</td></tr>
+        <tr><td>CachedStatus</td><td>insurance.request_for_quote.cached_status <strong>OR</strong> cpq.request_for_quote.cached_status</td><td style="color:var(--red);">NO</td><td>Not in any production column. Critical for query performance — RFQ status is currently always recomputed from line items.</td></tr>
+        <tr><td>ProductSkuID</td><td>insurance.request_for_quote.product_sku_id</td><td style="color:var(--red);">NO</td><td>Absent from prod. CLS migration 028 designed cpq_rfq_id FK pattern — product SKU never linked at RFQ level.</td></tr>
+        <tr><td>LineItems []RFQLineItem</td><td>insurance.request_for_quote_line_item.*</td><td style="color:var(--green);">YES</td><td>33,150 rows in prod. FK: cpq_request_for_quote_line_item_id. Has status, quote_id, source_quote_coverage_line_id.</td></tr>
+        <tr><td>RFQLineItem.DeclinationReason, .DeclinationCategory</td><td>insurance.request_for_quote_line_item.declination_*</td><td style="color:var(--red);">NO</td><td>Go entity has declination fields; prod table does not. Needed for RFQLI declined state.</td></tr>
+        <tr><td>RFQLineItem.PriceIndicationPremium, .PriceIndicationLimits</td><td>insurance.request_for_quote_line_item.price_indication_*</td><td style="color:var(--red);">NO</td><td>Go entity has price_indication fields; absent from prod RFQLI table.</td></tr>
+        <tr><td>RFQLineItem.OpportunityLineItemID</td><td>cpq.request_for_quote_line_item.opportunity_line_item_id</td><td style="color:var(--green);">YES</td><td>On CPQ layer line item (migration 028). OLI linkage intact.</td></tr>
       </tbody>
     </table>
     <div style="margin-top:12px; font-size:11px; color:var(--text-dim);">
-      <strong>Table lineage mismatch:</strong> CLS uses <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code>.
-      MegaBro backfill uses <code>insurance.request_for_quote</code> + <code>insurance.request_for_quote_line_item</code>.
-      Different table names for the insurance layer.
+      <strong>Table lineage mismatch:</strong> CLS migration 028 planned <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> as the insurance extension tables.
+      MegaBro backfill (commit 92bc4ccb, Finn, 2026-03-17) instead created <code>insurance.request_for_quote</code> + <code>insurance.request_for_quote_line_item</code> — completely different table names.
+      Neither <code>insurance.rfq</code> nor <code>insurance.rfq_line_item_v2</code> exist in production.
       <br><strong>Backfill source:</strong> <code>public.submissions</code> + <code>submission_underwriter_join</code> (BigBrother legacy tables).
-      Commit <code>92bc4ccb</code> by Finn, 2026-03-17.
+    </div>
+  </div>
+
+  <!-- Schema Audit: Migration vs Production Reality -->
+  <div style="margin-bottom:32px; margin-top:40px; border-top:1px solid var(--border); padding-top:32px;">
+    <h3 style="font-size:15px; margin-bottom:4px; color:var(--cyan);">Schema Audit: Migration vs Production Reality</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:16px;">
+      Verified against production (Supabase zkqbckjlqcmjdvfvbuyv.supabase.co) on 2026-03-25.
+    </p>
+
+    <!-- All RFQ-related tables in prod -->
+    <h4 style="font-size:13px; color:var(--accent); margin-bottom:8px;">1. All RFQ / Quote / Placement Tables in Production</h4>
+    <div style="overflow-x:auto; margin-bottom:24px;">
+      <table class="rules-table" style="max-width:900px;">
+        <thead><tr><th>Schema.Table</th><th>Columns</th><th>Row Count</th><th>Origin</th><th>Live?</th></tr></thead>
+        <tbody>
+          <tr><td><code>cpq.request_for_quote</code></td><td>10</td><td>25,441</td><td>CLS migration 020 (CPQ layer) + backfill 92bc4ccb</td><td style="color:var(--green);">YES — primary write target</td></tr>
+          <tr><td><code>cpq.request_for_quote_line_item</code></td><td>7</td><td>33,150</td><td>CLS migration 027 (line items restructure)</td><td style="color:var(--green);">YES — primary write target</td></tr>
+          <tr><td><code>cpq.quote</code></td><td>9</td><td>13,276</td><td>CLS migration 048</td><td style="color:var(--green);">YES</td></tr>
+          <tr><td><code>insurance.request_for_quote</code></td><td>16</td><td>25,441</td><td>MegaBro backfill 92bc4ccb — NOT a CLS migration table</td><td style="color:var(--yellow);">YES — backfill data, schema diverges from CLS design</td></tr>
+          <tr><td><code>insurance.request_for_quote_line_item</code></td><td>12</td><td>33,150</td><td>MegaBro backfill — NOT a CLS migration table</td><td style="color:var(--yellow);">YES — backfill data, missing declination/price_indication columns</td></tr>
+          <tr><td><code>insurance.rfq</code></td><td>—</td><td>—</td><td>CLS migration 028 planned (never applied)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD</td></tr>
+          <tr><td><code>insurance.rfq_line_item_v2</code></td><td>—</td><td>—</td><td>CLS migration 028 planned (never applied)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD</td></tr>
+          <tr><td><code>insurance.rfq_line_item</code></td><td>—</td><td>—</td><td>CLS migration 027 intermediate (superseded)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD</td></tr>
+          <tr><td><code>insurance.placement_intent</code></td><td>6</td><td>17,060</td><td>CLS migration 124 (created) + 125 (backfill from SI)</td><td style="color:var(--green);">YES — active, 6 columns: id, oli_id, submission_intent_id, status, created_at, updated_at</td></tr>
+          <tr><td><code>insurance.instant_quote</code></td><td>19</td><td>0</td><td>CLS migration 018</td><td style="color:var(--red);">EXISTS but EMPTY — vestigial</td></tr>
+          <tr><td><code>insurance.instant_quote_portals</code></td><td>6</td><td>unknown</td><td>CLS migration 075</td><td style="color:var(--yellow);">EXISTS — portal config table</td></tr>
+          <tr><td><code>insurance.insurance_quote</code></td><td>18</td><td>unknown</td><td>CLS migration 126 (staged quote contract)</td><td style="color:var(--green);">YES — canonical quote table</td></tr>
+          <tr><td><code>insurance.quote_line_item</code></td><td>13</td><td>unknown</td><td>CLS migration 126</td><td style="color:var(--green);">YES — canonical quote line item</td></tr>
+          <tr><td><code>insurance.quote</code></td><td>13</td><td>unknown</td><td>CLS migration 048</td><td style="color:var(--yellow);">EXISTS — may be superseded by insurance_quote</td></tr>
+          <tr><td><code>insurance.quote_analysis</code></td><td>15</td><td>unknown</td><td>CLS migration</td><td style="color:var(--yellow);">EXISTS</td></tr>
+          <tr><td><code>insurance.quote_coverage_line</code></td><td>—</td><td>—</td><td>Referenced in migration 126 FK</td><td style="color:var(--red);">DOES NOT EXIST IN PROD (no columns returned)</td></tr>
+          <tr><td><code>lifecycle.requests_for_quote</code></td><td>—</td><td>—</td><td>CLS migration 020 original (lifecycle schema)</td><td style="color:var(--red);">DOES NOT EXIST IN PROD — superseded by cpq schema</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Vestigial / legacy tables -->
+    <h4 style="font-size:13px; color:var(--yellow); margin-bottom:8px;">2. Vestigial / Legacy Tables (Should Have Been Dropped)</h4>
+    <div style="overflow-x:auto; margin-bottom:24px;">
+      <table class="rules-table" style="max-width:900px;">
+        <thead><tr><th>Schema.Table</th><th>Row Count</th><th>Why Vestigial</th><th>Migration that should drop it</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>insurance.intake_assignment</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Migration 083 executed <code>DROP TABLE IF EXISTS insurance.intake_assignment</code> — but table still exists in prod. The DROP did not execute (migration may not have run, or ran on wrong DB).</td>
+            <td>083_drop_legacy_assignment_task_tables.sql</td>
+          </tr>
+          <tr>
+            <td><code>insurance.intake_task</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Same as above — migration 083 DROP not executed in prod.</td>
+            <td>083_drop_legacy_assignment_task_tables.sql</td>
+          </tr>
+          <tr>
+            <td><code>insurance.submission_assignment</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Same — migration 083 DROP not executed.</td>
+            <td>083_drop_legacy_assignment_task_tables.sql</td>
+          </tr>
+          <tr>
+            <td><code>insurance.submission_task</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Same — migration 083 DROP not executed.</td>
+            <td>083_drop_legacy_assignment_task_tables.sql</td>
+          </tr>
+          <tr>
+            <td><code>insurance.renewal_assignment</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Same — migration 083 DROP not executed.</td>
+            <td>083_drop_legacy_assignment_task_tables.sql</td>
+          </tr>
+          <tr>
+            <td><code>insurance.renewal_task</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Same — migration 083 DROP not executed.</td>
+            <td>083_drop_legacy_assignment_task_tables.sql</td>
+          </tr>
+          <tr>
+            <td><code>insurance.instant_quote</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Created in migration 018 for a portal quoting flow that was never fully implemented. 19 columns, zero data. Superseded by instant_quote_portals + insurance_quote.</td>
+            <td>No migration drops it yet — needs new migration.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.financing_agreement</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Singular form — dead. Live data is in <code>insurance.financing_agreements</code> (2,498 rows). Two tables with near-identical names — singular is empty ghost.</td>
+            <td>No migration — naming artifact from schema evolution.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.payment</code></td><td style="color:var(--yellow);">20 rows</td>
+            <td>Singular form — mostly dead. Live data is in <code>insurance.payments</code> (10,113 rows). Low row count may be test/stale data.</td>
+            <td>No migration — investigate before dropping.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.policies</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Plural form — dead. Live data is in <code>insurance.policy</code> (5,212 rows).</td>
+            <td>No migration — naming artifact.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.policy_certificate_holder</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Both singular and plural forms exist with 0 rows — one or both are vestigial.</td>
+            <td>No migration.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.policy_certificate_holders</code></td><td style="color:var(--green);">0 rows</td>
+            <td>Both singular and plural forms exist with 0 rows.</td>
+            <td>No migration.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.entity_transitions</code></td><td style="color:var(--yellow);">5,881 rows</td>
+            <td>Plural form — exact same row count as <code>insurance.entity_transition</code> (5,881 rows). Likely a duplicate table. One is the canonical write target; the other is a ghost copy. Needs investigation to determine which is live.</td>
+            <td>No migration — dedup investigation needed.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.sample_accounts</code></td><td style="color:var(--yellow);">142 rows</td>
+            <td>Test/seed data table in production schema. Should not exist in insurance schema in prod.</td>
+            <td>No migration.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.sample_opportunities</code></td><td style="color:var(--yellow);">100 rows</td>
+            <td>Test/seed data table in production insurance schema.</td>
+            <td>No migration.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Ghost references -->
+    <h4 style="font-size:13px; color:var(--red); margin-bottom:8px;">3. Ghost References (Referenced in Code/Scripts but Don't Exist)</h4>
+    <div style="overflow-x:auto; margin-bottom:24px;">
+      <table class="rules-table" style="max-width:900px;">
+        <thead><tr><th>Reference</th><th>Referenced By</th><th>Reality</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>insurance.order_ext</code></td>
+            <td>MegaBro sync-pipeline, CLS migration 079 (planned)</td>
+            <td style="color:var(--red);">DOES NOT EXIST. Migration 079 planned <code>core.*</code> + <code>insurance.*_ext</code> split but was never applied. MegaBro sync fires errors every ~2 min referencing this. (ENG-1786)</td>
+          </tr>
+          <tr>
+            <td><code>insurance.v_policy_line_item_full</code></td>
+            <td>MegaBro sync-pipeline</td>
+            <td style="color:var(--red);">DOES NOT EXIST as a view. Migration 079 planned this as a backward-compatibility view over <code>core.policy_line_item + insurance.policy_line_item_ext</code>. Neither the base tables nor the view were applied. MegaBro sync errors.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.rfq</code></td>
+            <td>CLS migration 028, Go domain package <code>internal/domain/rfq/</code></td>
+            <td style="color:var(--red);">DOES NOT EXIST. CLS migration 028 defines this table but was never applied. The Go code in <code>internal/domain/rfq/entity.go</code> models the <em>planned</em> schema, not what's in prod.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.rfq_line_item_v2</code></td>
+            <td>CLS migration 028</td>
+            <td style="color:var(--red);">DOES NOT EXIST. Same — migration 028 not applied.</td>
+          </tr>
+          <tr>
+            <td><code>insurance.quote_coverage_line</code></td>
+            <td>CLS migration 126 FK: <code>legacy_quote_coverage_line_id REFERENCES insurance.quote_coverage_line(id)</code></td>
+            <td style="color:var(--red);">DOES NOT EXIST. No columns found in information_schema. The FK in migration 126 references a table that never existed.</td>
+          </tr>
+          <tr>
+            <td><code>core.order_ext</code>, <code>core.order_line_item_ext</code></td>
+            <td>CLS migration 079</td>
+            <td style="color:var(--red);">DOES NOT EXIST. Migration 079 planned core/insurance split but was never applied.</td>
+          </tr>
+          <tr>
+            <td><code>lifecycle.requests_for_quote</code></td>
+            <td>CLS migration 020 (original design)</td>
+            <td style="color:var(--red);">DOES NOT EXIST. Migration 020 targeted the <code>lifecycle</code> schema but prod uses the <code>cpq</code> schema instead. Entirely superseded.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Key findings summary -->
+    <div style="padding:16px; background:rgba(248,113,113,0.07); border:1px solid rgba(248,113,113,0.2); border-radius:8px;">
+      <div style="font-size:13px; font-weight:600; color:var(--red); margin-bottom:8px;">Key Audit Findings (2026-03-25)</div>
+      <ul style="font-size:11px; color:var(--text-dim); line-height:1.9; padding-left:16px;">
+        <li><strong>Migration 083 did not fully execute:</strong> 6 legacy task/assignment tables still exist in <code>insurance</code> with 0 rows. Safe to drop, but a cleanup migration is needed.</li>
+        <li><strong>Migration 079 never ran:</strong> The entire <code>core.*</code> / <code>insurance.*_ext</code> schema split from migration 079 is absent from production. MegaBro sync references ghost tables from this migration on every poll cycle.</li>
+        <li><strong>Migration 028 never ran:</strong> <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> don't exist. The CLS Go domain model is written against a schema that was never applied.</li>
+        <li><strong>MegaBro backfill (92bc4ccb) created a parallel lineage:</strong> Instead of <code>insurance.rfq</code>, MegaBro populated <code>insurance.request_for_quote</code> — a different table than what CLS migrations planned. These names conflict with the CLS design intent.</li>
+        <li><strong>Singular/plural table name chaos in insurance schema:</strong> At least 5 pairs of (singular, plural) tables exist — one is live, one is empty ghost. Financing agreement, payment, policies, policy_certificate_holder(s), entity_transition(s).</li>
+        <li><strong><code>insurance.entity_transition</code> vs <code>insurance.entity_transitions</code>:</strong> Both have exactly 5,881 rows — they may be synced mirror tables or one is a stale duplicate. Needs investigation.</li>
+        <li><strong>Test data in production insurance schema:</strong> <code>insurance.sample_accounts</code> (142 rows) and <code>insurance.sample_opportunities</code> (100 rows) should not exist in production.</li>
+        <li><strong><code>insurance.quote_coverage_line</code> ghost FK:</strong> Migration 126 adds a foreign key referencing this table but it does not exist in production.</li>
+      </ul>
     </div>
   </div>
 
@@ -1205,16 +1492,18 @@
     <div style="font-size:13px; font-weight:600; color:var(--red); margin-bottom:6px;">⚠ Production Reality Check (verified 2026-03-25)</div>
     <div style="font-size:11px; color:var(--text-dim); line-height:1.6;">
       <strong>The live RFQ creation pipeline does NOT exist in production yet.</strong><br>
-      • All 25,440 RFQs in <code>cpq.request_for_quote</code> were created by a <code>backfill_public_submissions</code> batch job — no runtime service is creating RFQs.<br>
-      • Production schema is missing columns: <code>channel</code>, <code>is_synthetic</code>, <code>snapshot_underwriter_name</code>, <code>snapshot_carrier_name</code>. CLS migrations not applied.<br>
-      • BigBrother → Agora proxy code exists but is not producing RFQs (zero BB-triggered RFQs found).<br>
-      • PlacementIntents ARE actively created (564 in last 30 days) but via Process Manager at OLI level, NOT via RFQ creation.<br>
-      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, CLS schema migrations must be applied and a live RFQ creation pipeline must be running.<br><br>
-      <strong>Backfill origin:</strong> All 25,440 RFQs were created by MegaBro backfill scripts (NOT CLS migrations) — commit <code>92bc4ccb</code> by Finn, 2026-03-17.<br>
+      • All 25,441 RFQs in <code>cpq.request_for_quote</code> + <code>insurance.request_for_quote</code> were created by a MegaBro backfill job — no runtime service is creating RFQs today.<br>
+      • 33,150 RFQ line items in <code>cpq.request_for_quote_line_item</code> + <code>insurance.request_for_quote_line_item</code> (backfill only).<br>
+      • 17,060 <code>insurance.placement_intent</code> rows — active and live (created via CLS Process Manager at OLI level, NOT via RFQ creation).<br>
+      • Production schema is missing Go entity fields: <code>channel</code>, <code>snapshot_*</code>, <code>portal_*</code>, <code>assigned_*</code>, <code>cached_status</code>, <code>product_sku_id</code>, <code>declination_*</code>, <code>price_indication_*</code>.<br>
+      • <code>insurance.rfq</code> and <code>insurance.rfq_line_item_v2</code> (CLS migration 028) DO NOT EXIST in production.<br>
+      • <code>insurance.order_ext</code>, <code>insurance.v_policy_line_item_full</code> (CLS migration 079) DO NOT EXIST — MegaBro sync errors on every poll.<br>
+      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, the table lineage must be resolved, missing columns added, and a live RFQ creation pipeline must be running.<br><br>
+      <strong>Backfill origin:</strong> All 25,441 RFQs were created by MegaBro backfill scripts (NOT CLS migrations) — commit <code>92bc4ccb</code> by Finn, 2026-03-17.<br>
       <strong>Two separate table lineages coexist in production:</strong><br>
-      &nbsp;&nbsp;• MegaBro scripts: <code>cpq.request_for_quote</code> + <code>insurance.request_for_quote</code> (with <code>underwriter_name</code>, <code>carrier_name</code>)<br>
-      &nbsp;&nbsp;• CLS migrations: <code>cpq.request_for_quote</code> + <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> (different table names!)<br>
-      <strong>Go entity struct mismatch:</strong> CLS entity has fields that exist in NO applied migration: <code>channel</code>, <code>snapshot_*</code>, <code>portal_*</code>, <code>assigned_*</code>, <code>cached_status</code>, <code>product_sku_id</code>.<br>
+      &nbsp;&nbsp;• MegaBro scripts: <code>cpq.request_for_quote</code> (10 cols) + <code>insurance.request_for_quote</code> (16 cols, has underwriter/carrier names)<br>
+      &nbsp;&nbsp;• CLS migration 028 planned: <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> — NEITHER EXISTS IN PROD<br>
+      <strong>Go entity struct mismatch:</strong> CLS <code>internal/domain/rfq/entity.go</code> models a schema that was never applied. Full disparity table in Work Items tab Schema Audit section.<br>
       <strong>Backfill source:</strong> <code>public.submissions</code> + <code>submission_underwriter_join</code> — legacy BigBrother tables.
     </div>
   </div>
@@ -1339,6 +1628,232 @@
       <thead><tr><th>PI Transition</th><th>Work Item Title Template</th><th>Kind</th><th>Key Metadata</th></tr></thead>
       <tbody id="miniorq-workitems-body"></tbody>
     </table>
+  </div>
+
+  <!-- ─── Entity Lifecycle: Create vs Update Decision Matrix ─── -->
+  <div style="margin-top:40px; border-top:1px solid var(--border); padding-top:32px;">
+    <h3 style="font-size:14px; margin-bottom:6px; color:var(--accent);">Entity Lifecycle: Create vs Update Decision Matrix</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:16px; line-height:1.6;">
+      Full business logic for each phoenix scenario — what triggers entity creation, the exact data model implications,
+      and unresolved design questions. Color coding matches PI v2 tab:
+      <span style="color:var(--green); font-weight:600;">green = create new</span>,
+      <span style="color:var(--yellow); font-weight:600;">yellow = update in place</span>,
+      <span style="color:var(--cyan); font-weight:600;">blue = mixed</span>.
+    </p>
+
+    <!-- Scenario cards -->
+    <div style="display:flex; flex-direction:column; gap:10px; max-width:1000px; margin-bottom:32px;">
+
+      <!-- 1. Remarketing -->
+      <details style="background:var(--surface); border:1px solid rgba(74,222,128,0.3); border-left:4px solid var(--green); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--green);">&#9650; CREATE NEW</span>
+          <span style="color:var(--text);">1. Remarketing — All PIs declined, new carriers targeted</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">What triggers it</div>
+              <p>Operator clicks "Remarket" in MegaBro after all PIs for an OLI reach <code>declined</code>. CLS backtracks the CoverageIntent from <code>placement → submission</code>.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px; margin-top:10px;">Entity creation chain</div>
+              <p>New <code>SubmissionIntent</code> (<code>type=remarketing</code>, <code>prior_si_id=&lt;original SI&gt;</code>) → Agora generates new packet for different carriers → new <code>RFQ</code> per new carrier → new <code>RFQLI</code> per coverage → new <code>PI</code> per RFQLI.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--red); margin-bottom:4px;">Old entity fate</div>
+              <p>Old PIs freeze at <code>remarketing</code> terminal state. Old RFQs: <strong>design question — soft-withdrawn or left in terminal state?</strong> Most likely left as-is since the carrier declined; withdrawal implies we rescinded an offer (we didn't).</p>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px; margin-top:10px;">Open question</div>
+              <p>Should old RFQs be explicitly transitioned to <code>withdrawn</code>? Or does the SI-level terminal state implicitly retire them? Recommendation: leave as declined (terminal), no explicit withdrawal needed.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 2. Rework -->
+      <details style="background:var(--surface); border:1px solid rgba(74,222,128,0.3); border-left:4px solid var(--green); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--green);">&#9650; CREATE NEW</span>
+          <span style="color:var(--text);">2. Rework — Defective packet (wrong docs / wrong entity)</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">What triggers it</div>
+              <p>Operator determines the submission packet was incorrect — wrong documents, wrong named entity, missing ACORD forms. NOT a carrier decision; it's an internal quality failure. CLS backtracks CI: <code>placement → submission</code>.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px; margin-top:10px;">Entity creation chain</div>
+              <p>New <code>SubmissionIntent</code> (<code>prior_si_id</code> links back). Agora regenerates packet. New <code>RFQ</code> to <em>same carrier</em> → new <code>RFQLI</code> → new <code>PI</code>. Same underwriter context, fresh paper trail.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--red); margin-bottom:4px;">Old entity fate</div>
+              <p>Old PI freezes at <code>rework</code> terminal. Old RFQ remains — it represents the defective attempt and is part of the audit trail. Not withdrawn: we're not rescinding, we're acknowledging an error.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px; margin-top:10px;">Key distinction from Remarketing</div>
+              <p>Remarketing = carrier said no. Rework = WE messed up. Different operator workflows, different SI types, different root-cause tracking.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 3. Quote Rework -->
+      <details style="background:var(--surface); border:1px solid rgba(34,211,238,0.3); border-left:4px solid var(--cyan); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--cyan);">~ MIXED</span>
+          <span style="color:var(--text);">3. Quote Rework — disqualified_quote → retry same carrier</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:4px;">What triggers it</div>
+              <p>A quote passed receipt but failed validation (<code>disqualified_quote</code>). Operator wants to contact the same carrier to get corrected quote data — not remarketing (same carrier, same coverage, no SI backtrack needed).</p>
+              <div style="font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:4px; margin-top:10px;">Entity creation chain (lean phoenix)</div>
+              <p>Old PI freezes at <code>disqualified_quote</code>. New PI created for same carrier/RFQLI. No new SI — same submission is still valid. Link via <code>PI.prior_pi_id</code> (field TBD — not in current schema).</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">Why lean phoenix, not full backtrack</div>
+              <p>The submission was correct. The carrier relationship is intact. The carrier just sent bad quote data (missing field, wrong premium format, wrong limits). We go back to the same UW at the same carrier — no new packet needed.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px; margin-top:10px;">Open question</div>
+              <p>Should this create a new PI or allow the old PI to re-enter <code>under_review</code>? Creating a new PI preserves immutability and clean audit. The risk: proliferation of PI entities for each correction cycle.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 4. Unsolicited Coverage -->
+      <details style="background:var(--surface); border:1px solid rgba(74,222,128,0.3); border-left:4px solid var(--green); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--green);">&#9650; CREATE NEW</span>
+          <span style="color:var(--text);">4. Unsolicited Coverage — Carrier bundles in Cyber when only GL requested</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">CASHMONEY's role</div>
+              <p>CASHMONEY's RFQMatcher detects a coverage line in the quote that has no matching RFQLI. It creates a synthetic RFQLI (<code>is_synthetic=true</code>) to house the unsolicited coverage. A PI is created only if a matching OLI can be resolved.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">Operator workflow</div>
+              <p>Unsolicited PI enters a "review required" hold. Operator sees a work item: "Unsolicited Cyber quote from [Carrier] — accept or dismiss." If accepted, PI proceeds. If dismissed, PI transitions to <code>withdrawn</code>. Original GL PI is unaffected throughout.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 5. Revised Quote -->
+      <details style="background:var(--surface); border:1px solid rgba(251,191,36,0.3); border-left:4px solid var(--yellow); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--yellow);">&#9654; UPDATE IN PLACE</span>
+          <span style="color:var(--text);">5. Revised Quote — Same carrier, revised premium ($12k → $9.5k)</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">Why update in place</div>
+              <p>The PI has NOT reached a terminal state. It's still in <code>quote_received</code>. The carrier relationship is unchanged — same UW, same carrier, same coverage, same RFQ. Only the quote document changed. PI tracks the placement relationship, not the document.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px; margin-top:10px;">What changes</div>
+              <p>New <code>Quote</code> entity created (linked to same RFQLI). Old Quote entity preserved as history. PI stays at <code>quote_received</code>. CASHMONEY re-runs validation on the new Quote, may re-transition PI to <code>disqualified_quote</code> or <code>approved_quote</code>.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">The core distinction</div>
+              <p><strong>PI = carrier relationship + placement attempt.</strong> Quote = a specific document from that carrier. A carrier can send multiple quotes as part of one placement attempt. The PI only resets if the attempt itself fails terminally.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--text-dim); margin-bottom:4px; margin-top:10px;">MegaBro display</div>
+              <p>Quote history panel shows all versions with timestamps. Most recent quote premium shown prominently. Operator can compare v1 vs v2 side-by-side.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 6. Split Submission -->
+      <details style="background:var(--surface); border:1px solid rgba(34,211,238,0.3); border-left:4px solid var(--cyan); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--cyan);">~ MIXED</span>
+          <span style="color:var(--text);">6. Split Submission — Carrier accepts GL but declines WC/PL</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:4px;">Normal flow (no phoenix)</div>
+              <p>This is the expected behavior of per-RFQLI PIs. GL RFQLI has its own PI (→ <code>quote_received</code>). WC/PL RFQLI has its own PI (→ <code>declined</code>). Independent state machines, no special handling needed.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">When phoenix kicks in</div>
+              <p>If the operator then wants to remarket WC/PL to <em>other carriers</em>, that triggers the remarketing flow: new SI → new RFQ (different carrier) → new RFQLI (WC/PL) → new PI. The old WC/PL PI stays frozen at <code>declined</code>.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 7. Synthetic RFQ -->
+      <details style="background:var(--surface); border:1px solid rgba(74,222,128,0.3); border-left:4px solid var(--green); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--green);">&#9650; CREATE NEW</span>
+          <span style="color:var(--text);">7. Synthetic RFQ — Quote arrives with no matching RFQ (CASHMONEY creates synthetic)</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">Why this happens</div>
+              <p>Carrier emails a quote that was solicited informally (phone call, referral, existing relationship) and no formal RFQ was created in the system. CASHMONEY can't find a matching RFQ by carrier + OLI lookup, so it creates a synthetic RFQ to house the quote.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px; margin-top:10px;">Entity creation</div>
+              <p><code>RFQ.is_synthetic=true</code> → RFQLI → PI (if OLI resolved). PI immediately enters <code>submitted</code> but is flagged for operator review before advancing. No SubmissionIntent — the submission happened outside the system.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">OLI resolution failure path</div>
+              <p>If CASHMONEY cannot resolve an OLI (no matching opportunity in CLS), the quote enters an "orphan queue" — a work item for operator to manually link to the correct opportunity. Once linked, normal PI flow resumes.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--text-dim); margin-bottom:4px; margin-top:10px;">Synthetic vs unsolicited coverage</div>
+              <p>Synthetic = no RFQ existed at all. Unsolicited coverage = RFQ existed for one coverage (GL) but carrier quoted an additional one (Cyber). Different triggers, same <code>is_synthetic=true</code> flag on the generated RFQLI.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 8. Portal Retry -->
+      <details style="background:var(--surface); border:1px solid rgba(74,222,128,0.3); border-left:4px solid var(--green); border-radius:8px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; list-style:none; font-size:12px; font-weight:600;">
+          <span style="color:var(--green);">&#9650; CREATE NEW</span>
+          <span style="color:var(--text);">8. Instant Quote Portal Retry — Portal declined (appetite), operator fixes data + resubmits</span>
+        </summary>
+        <div style="padding:0 16px 16px; font-size:11px; color:var(--text-dim); line-height:1.7; border-top:1px solid var(--border);">
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px;">Why phoenix applies here</div>
+              <p>Portal responses are instant and deterministic — unlike a human UW email conversation, there's no ongoing negotiation. A portal decline is a system-generated final answer for that set of application inputs. Changing inputs = new submission attempt.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--green); margin-bottom:4px; margin-top:10px;">Entity creation</div>
+              <p>Old PI freezes at <code>declined</code> (with <code>decline_reason=appetite</code>). New RFQ to same portal (channel=<code>instant_quote</code>) with updated application snapshot → new RFQLI → new PI. Application data delta is captured in the new RFQ's <code>metadata</code>.</p>
+            </div>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--yellow); margin-bottom:4px;">Portal-specific considerations</div>
+              <p>Portal channels skip <code>acknowledged</code>, <code>info_requested</code>, and <code>price_indication</code> states. The new PI starts at <code>submitted</code> and immediately transitions to either <code>quote_received</code> or <code>declined</code> — no waiting period.</p>
+              <div style="font-size:11px; font-weight:600; color:var(--text-dim); margin-bottom:4px; margin-top:10px;">Audit trail</div>
+              <p>MegaBro shows retry history with prior decline reason and what application fields changed. Helps operator understand why the appetite threshold was crossed and what correction was made.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+    </div>
+
+    <!-- Orchestration decision tree -->
+    <div style="max-width:900px; margin-bottom:16px;">
+      <h4 style="font-size:13px; color:var(--accent); margin-bottom:10px;">MiniOrq Decision Tree: New Entity vs In-Place Update</h4>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; font-size:11px; line-height:2;">
+        <div style="color:var(--text);">Is the PI in a <strong>terminal state</strong>? (declined, rework, remarketing, withdrawn, disqualified_quote)</div>
+        <div style="padding-left:20px; border-left:2px solid var(--green); margin:4px 0 4px 8px;">
+          <span style="color:var(--green); font-weight:600;">YES →</span> <strong>Create new entities.</strong> Old PI is history. New SI (if backtrack needed) or new PI (if lean phoenix). Always link via <code>prior_si_id</code> / <code>prior_pi_id</code>.
+        </div>
+        <div style="color:var(--text); margin-top:6px;">Is the PI in an <strong>active state</strong>? (submitted, acknowledged, under_review, quote_received, ...)</div>
+        <div style="padding-left:20px; border-left:2px solid var(--yellow); margin:4px 0 4px 8px;">
+          <span style="color:var(--yellow); font-weight:600;">YES →</span> Is this a <strong>new carrier interaction</strong> (new quote document from same carrier)?
+          <div style="padding-left:20px; border-left:2px solid var(--yellow); margin:2px 0 2px 8px;">
+            <span style="color:var(--yellow);">YES →</span> <strong>Add new Quote entity.</strong> PI stays in place. This is the revised-quote scenario.
+          </div>
+          <div style="padding-left:20px; border-left:2px solid var(--green); margin:2px 0 2px 8px;">
+            <span style="color:var(--green);">NO — it's a new carrier / new coverage →</span> <strong>Create new RFQLI + PI.</strong> Original PI unaffected.
+          </div>
+        </div>
+        <div style="color:var(--text); margin-top:6px;">Is this an <strong>unsolicited quote</strong> (no prior RFQ)?</div>
+        <div style="padding-left:20px; border-left:2px solid var(--green); margin:4px 0 4px 8px;">
+          <span style="color:var(--green); font-weight:600;">YES →</span> CASHMONEY creates <code>is_synthetic=true</code> RFQ → RFQLI → PI (pending operator review).
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -6527,7 +7042,7 @@ const ENG_TODOS = [
     ticket: 'ENG-1795',
     priority: 'High',
     status: 'Not Started',
-    notes: 'Table lineage mismatch documented in Work Items tab. MegaBro backfill commit 92bc4ccb (Finn, 2026-03-17) created a parallel lineage that conflicts with CLS migrations.',
+    notes: 'CONFIRMED 2026-03-25: insurance.rfq and insurance.rfq_line_item_v2 DO NOT EXIST in production. The backfill created insurance.request_for_quote and insurance.request_for_quote_line_item instead (25,441 and 33,150 rows). CLS migration 028 was never applied. Full audit in Schema Audit section of Work Items tab.',
   },
   {
     phase: 0, seq: 3,
@@ -6537,7 +7052,7 @@ const ENG_TODOS = [
     ticket: null,
     priority: 'High',
     status: 'Not Started',
-    notes: 'RFQ Schema Status table in Work Items tab shows all MISSING fields. Prerequisite for live RFQ creation.',
+    notes: 'CONFIRMED 2026-03-25: 9 Go entity fields have no corresponding prod column. Missing: channel, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url, assigned_to/type/at, cached_status, product_sku_id, declination_reason/category (on RFQLI), price_indication_premium/limits (on RFQLI). Full disparity table in Schema Audit section of Work Items tab.',
   },
   {
     phase: 0, seq: 4,
@@ -6557,7 +7072,58 @@ const ENG_TODOS = [
     ticket: 'ENG-1786',
     priority: 'Med',
     status: 'Not Started',
-    notes: 'Bug. Not blocking but contributes to error noise. Fix by removing or stubbing missing table references.',
+    notes: 'CONFIRMED 2026-03-25: insurance.order_ext and insurance.v_policy_line_item_full confirmed absent from prod. Neither table exists in information_schema. CLS migration 079 (core/insurance split) was never applied. The planned core.order, core.order_line_item, core.policy, core.policy_line_item tables also do not exist. Full ghost reference table in Schema Audit section of Work Items tab.',
+  },
+
+  {
+    phase: 0, seq: 6,
+    title: 'Apply migration 083 cleanup: actually drop legacy task/assignment tables',
+    desc: 'Migration 083_drop_legacy_assignment_task_tables.sql contains DROP TABLE for insurance.intake_task, insurance.intake_assignment, insurance.submission_task, insurance.submission_assignment, insurance.renewal_task, insurance.renewal_assignment. All 6 tables exist in production with 0 rows — the migration either did not run or ran against a different DB. Apply a corrective migration to drop these ghost tables.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'Schema audit 2026-03-25: all 6 tables confirmed 0 rows in prod. Safe to drop. Adds schema clarity and eliminates namespace confusion.',
+  },
+  {
+    phase: 0, seq: 7,
+    title: 'Drop singular/dead form of insurance.financing_agreement and insurance.policies',
+    desc: 'insurance.financing_agreement (0 rows) is dead — live data is in insurance.financing_agreements (2,498 rows). insurance.policies (0 rows) is dead — live data is in insurance.policy (5,212 rows). Both singular-form tables are vestigial naming artifacts. Add a migration to drop them.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'Schema audit 2026-03-25. Also audit insurance.payment (20 rows, singular) vs insurance.payments (10,113 rows) — 20 rows may be stale/test data. Clean up after verifying no live references.',
+  },
+  {
+    phase: 0, seq: 8,
+    title: 'Investigate insurance.entity_transition vs insurance.entity_transitions duplicate',
+    desc: 'Both insurance.entity_transition and insurance.entity_transitions have exactly 5,881 rows — they may be synced mirror tables or one is a stale duplicate. Determine which is the canonical write target, redirect all writes, and drop the other. A live duplicate write target is a correctness risk.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Schema audit 2026-03-25. Exact row-count match (5,881 = 5,881) is suspicious — could be a trigger-based sync, or one was cloned. Check if they have identical data and which table is referenced by application code.',
+  },
+  {
+    phase: 0, seq: 9,
+    title: 'Remove test seed tables from production insurance schema',
+    desc: 'insurance.sample_accounts (142 rows) and insurance.sample_opportunities (100 rows) are test/seed data tables sitting in the production insurance schema. They should never have been applied to production. Add a migration to drop them.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'Schema audit 2026-03-25. No application code should reference these — they were likely seeded during early development and never cleaned up.',
+  },
+  {
+    phase: 0, seq: 10,
+    title: 'Fix insurance.quote_coverage_line ghost FK in migration 126',
+    desc: 'CLS migration 126_quote_owned_line_items.sql adds a FK column legacy_quote_coverage_line_id REFERENCES insurance.quote_coverage_line(id) on insurance.quote_line_item. The table insurance.quote_coverage_line does not exist in production. If migration 126 has not been applied yet this will fail on apply. If it has been applied the FK is broken. Resolve by either creating the missing table or removing the FK reference.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Schema audit 2026-03-25. Blocking migration 126 from being safely applied. Investigate whether quote_coverage_line was dropped or never created, then either restore or remove the reference.',
   },
 
   // ── Phase 1 ────────────────────────────────────────────────────────────────
