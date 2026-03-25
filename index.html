@@ -1102,6 +1102,38 @@
     </table>
   </div>
 
+  <!-- RFQ Schema Status -->
+  <div style="margin-bottom:32px;">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">RFQ Schema Status (Production vs Code)</h3>
+    <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+      The CLS Go entity struct references columns that don't exist in any applied migration. Two separate table lineages coexist.
+    </p>
+    <table class="rules-table" style="max-width:800px;">
+      <thead><tr><th>Field</th><th>In Go Entity?</th><th>In CLS Migration?</th><th>In MegaBro Script?</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>id, opportunity_id, status, notes</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (028)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
+        <tr><td>idempotency_key</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (072)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
+        <tr><td>created_by</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (028)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
+        <tr><td>is_synthetic</td><td style="color:var(--green);">Yes</td><td style="color:var(--green);">Yes (081)</td><td style="color:var(--green);">Yes</td><td>OK</td></tr>
+        <tr><td>channel</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
+        <tr><td>snapshot_underwriter_name</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--yellow);">In insurance.request_for_quote</td><td style="color:var(--yellow);">SPLIT</td></tr>
+        <tr><td>snapshot_carrier_name</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--yellow);">In insurance.request_for_quote</td><td style="color:var(--yellow);">SPLIT</td></tr>
+        <tr><td>portal_name, portal_url</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
+        <tr><td>assigned_to, assigned_type, assigned_at</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
+        <tr><td>cached_status</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
+        <tr><td>product_sku_id</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No</td><td style="color:var(--red);">No</td><td style="color:var(--red);">MISSING</td></tr>
+        <tr><td>submission_intent_id (on RFQ)</td><td style="color:var(--green);">Yes</td><td style="color:var(--red);">No (only on RFQLI)</td><td style="color:var(--green);">Yes</td><td style="color:var(--yellow);">SPLIT</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:12px; font-size:11px; color:var(--text-dim);">
+      <strong>Table lineage mismatch:</strong> CLS uses <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code>.
+      MegaBro backfill uses <code>insurance.request_for_quote</code> + <code>insurance.request_for_quote_line_item</code>.
+      Different table names for the insurance layer.
+      <br><strong>Backfill source:</strong> <code>public.submissions</code> + <code>submission_underwriter_join</code> (BigBrother legacy tables).
+      Commit <code>92bc4ccb</code> by Finn, 2026-03-17.
+    </div>
+  </div>
+
   <!-- Submissions work items: what's missing -->
   <div style="margin-top:32px; padding:16px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px;">
     <h3 style="font-size:14px; color:var(--yellow); margin-bottom:8px;">Gap: No Placement Work Items Yet</h3>
@@ -1203,7 +1235,13 @@
       • Production schema is missing columns: <code>channel</code>, <code>is_synthetic</code>, <code>snapshot_underwriter_name</code>, <code>snapshot_carrier_name</code>. CLS migrations not applied.<br>
       • BigBrother → Agora proxy code exists but is not producing RFQs (zero BB-triggered RFQs found).<br>
       • PlacementIntents ARE actively created (564 in last 30 days) but via Process Manager at OLI level, NOT via RFQ creation.<br>
-      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, CLS schema migrations must be applied and a live RFQ creation pipeline must be running.
+      • <strong>Implication:</strong> Before PI v2 (RFQLI-level) can work, CLS schema migrations must be applied and a live RFQ creation pipeline must be running.<br><br>
+      <strong>Backfill origin:</strong> All 25,440 RFQs were created by MegaBro backfill scripts (NOT CLS migrations) — commit <code>92bc4ccb</code> by Finn, 2026-03-17.<br>
+      <strong>Two separate table lineages coexist in production:</strong><br>
+      &nbsp;&nbsp;• MegaBro scripts: <code>cpq.request_for_quote</code> + <code>insurance.request_for_quote</code> (with <code>underwriter_name</code>, <code>carrier_name</code>)<br>
+      &nbsp;&nbsp;• CLS migrations: <code>cpq.request_for_quote</code> + <code>insurance.rfq</code> + <code>insurance.rfq_line_item_v2</code> (different table names!)<br>
+      <strong>Go entity struct mismatch:</strong> CLS entity has fields that exist in NO applied migration: <code>channel</code>, <code>snapshot_*</code>, <code>portal_*</code>, <code>assigned_*</code>, <code>cached_status</code>, <code>product_sku_id</code>.<br>
+      <strong>Backfill source:</strong> <code>public.submissions</code> + <code>submission_underwriter_join</code> — legacy BigBrother tables.
     </div>
   </div>
 
