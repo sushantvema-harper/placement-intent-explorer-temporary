@@ -609,6 +609,7 @@
   <div class="tab" data-panel="work-items">Work Items</div>
   <div class="tab" data-panel="harper-claw">Harper-Claw</div>
   <div class="tab" data-panel="miniorq">MiniOrq (Agora)</div>
+  <div class="tab" data-panel="instant-quotes">Instant Quotes</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -1234,6 +1235,60 @@
       <tbody id="miniorq-topics-body"></tbody>
     </table>
   </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 11: Instant Quotes                    -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-instant-quotes">
+  <!-- Section 1: Two Parallel Systems -->
+  <h2 style="font-size:16px; margin-bottom:8px;">Two Parallel Systems (Architecture Gap)</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Harper currently has <strong>two separate instant-quote subsystems</strong> that need reconciliation.
+    The legacy entity predates the RFQ system; the new model routes IQ through the standard channel-aware RFQ pipeline.
+  </p>
+  <div id="iq-parallel-systems" style="display:flex; gap:16px; margin-bottom:32px; flex-wrap:wrap; align-items:stretch;"></div>
+
+  <!-- Section 2: InstantQuote State Machine (Legacy) -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">InstantQuote State Machine (Legacy)</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Click a state to see its definition. This machine lives on <code>insurance.instant_quote</code> (migration 018).
+  </p>
+  <div id="iq-state-machine" style="max-width:900px; margin-bottom:32px;"></div>
+
+  <!-- Section 3: PI v2 Channel Paths -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">PI v2 Channel Paths</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:16px;">
+    PlacementIntent v2 handles three channels differently. Portal and API paths skip intermediate negotiation states.
+    Grayed-out states are skipped for that channel.
+  </p>
+  <div id="iq-channel-paths" style="display:flex; flex-direction:column; gap:20px; max-width:1000px; margin-bottom:32px;"></div>
+
+  <!-- Section 4: Quote Validation Integration -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Quote Validation by Channel</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:16px;">
+    Each channel uses a different validation pipeline before a quote can become <code>approved_quote</code>.
+  </p>
+  <div id="iq-validation" style="display:flex; gap:16px; margin-bottom:32px; flex-wrap:wrap; align-items:stretch;"></div>
+
+  <!-- Section 5: Supported Portals -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">Supported Portals</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    Known instant-quote portals and the CoverForce API integration.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:32px;">
+    <table class="rules-table" style="max-width:900px;">
+      <thead><tr><th>Portal</th><th>Coverages</th><th>Notes</th></tr></thead>
+      <tbody id="iq-portals-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Section 6: Missing Pieces -->
+  <h3 style="font-size:14px; margin-bottom:12px; color:var(--red);">Missing Pieces for Reconciliation</h3>
+  <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+    What needs to change before the two systems can be unified.
+  </p>
+  <div id="iq-missing-pieces" style="max-width:900px; margin-bottom:24px;"></div>
 </div>
 
 <script>
@@ -5136,6 +5191,363 @@ function buildMiniOrq() {
 }
 
 buildMiniOrq();
+
+// ═══════════════════════════════════════════════
+// INSTANT QUOTES TAB
+// ═══════════════════════════════════════════════
+
+const IQ_LEGACY_FIELDS = [
+  'carrier_name', 'portal_name', 'portal_url', 'premium',
+  'document_url', 'accepted', 'reason_accepted', 'reason_declined'
+];
+
+const IQ_LEGACY_STATES = {
+  ready:          { color: 'var(--accent)',  bg: 'var(--accent-dim)', desc: 'Initial state. IQ record created, portal not yet visited.' },
+  in_progress:    { color: 'var(--yellow)',  bg: 'var(--yellow-dim)', desc: 'Operator is actively working the portal — quoting in progress.' },
+  quote_received: { color: 'var(--cyan)',    bg: '#0e3a4a',          desc: 'Portal returned a bindable quote with premium amount.' },
+  accepted:       { color: 'var(--green)',   bg: 'var(--green-dim)', desc: 'Operator accepted the quote — pending final approval.' },
+  declined:       { color: 'var(--red)',     bg: 'var(--red-dim)',   desc: 'Quote declined by operator or carrier. Terminal.' },
+  approved:       { color: '#34d399',        bg: '#064e3b',          desc: 'Quote approved and ready for binding. Terminal.' },
+  cancelled:      { color: 'var(--text-dim)',bg: '#1f2937',          desc: 'IQ cancelled before completion. Terminal.' }
+};
+
+const IQ_LEGACY_TRANSITIONS = {
+  ready:          ['in_progress', 'cancelled'],
+  in_progress:    ['quote_received', 'cancelled'],
+  quote_received: ['accepted', 'declined', 'cancelled'],
+  accepted:       ['approved', 'cancelled']
+};
+
+const IQ_PORTALS = [
+  { portal: 'Next Insurance',  coverages: 'GL, BOP',             notes: '' },
+  { portal: 'Coterie',         coverages: 'GL, BOP',             notes: 'BOP incompatible with leased buildings' },
+  { portal: 'biBERK',          coverages: 'GL, WC, BOP',         notes: '' },
+  { portal: 'Thimble',         coverages: 'GL',                  notes: 'Short-term / event' },
+  { portal: 'THREE',           coverages: 'GL',                  notes: '' },
+  { portal: 'Hiscox',          coverages: 'GL, PL',              notes: '' },
+  { portal: 'AMWINS',          coverages: 'Various (wholesaler)', notes: '' },
+  { portal: 'RT Connector',    coverages: 'WC',                  notes: 'Secondary WC portal' },
+  { portal: 'Pie Insurance',   coverages: 'WC',                  notes: 'Primary WC portal' },
+  { portal: 'Appunds',         coverages: 'Various',             notes: '' },
+  { portal: 'CoverForce API',  coverages: 'WC, BOP (pilot)',     notes: 'AmTrust, Employers, Coterie' }
+];
+
+const IQ_CHANNEL_PATHS = [
+  {
+    label: 'Brokered',
+    color: 'var(--accent)',
+    bg: 'var(--accent-dim)',
+    timing: 'days / weeks',
+    states: [
+      { name: 'submitted', active: true },
+      { name: 'acknowledged', active: true, note: 'optional' },
+      { name: 'under_review', active: true },
+      { name: 'info_requested', active: true, note: 'loop' },
+      { name: 'price_indication', active: true },
+      { name: 'quote_received', active: true },
+      { name: 'approved_quote', active: true }
+    ],
+    desc: 'Full negotiation cycle. All states available.'
+  },
+  {
+    label: 'Portal (Instant Quote)',
+    color: 'var(--orange)',
+    bg: '#5c3012',
+    timing: 'minutes / hours',
+    states: [
+      { name: 'submitted', active: true },
+      { name: 'acknowledged', active: false },
+      { name: 'under_review', active: false },
+      { name: 'info_requested', active: false },
+      { name: 'price_indication', active: false },
+      { name: 'quote_received', active: true },
+      { name: 'approved_quote', active: true }
+    ],
+    altTerminal: { name: 'declined', active: true, note: 'instant appetite decline' },
+    desc: 'Portals give bindable quotes or instant declines. Skips negotiation states.'
+  },
+  {
+    label: 'API / CoverForce',
+    color: 'var(--green)',
+    bg: 'var(--green-dim)',
+    timing: 'seconds',
+    states: [
+      { name: 'submitted', active: true },
+      { name: 'acknowledged', active: false },
+      { name: 'under_review', active: false },
+      { name: 'info_requested', active: false },
+      { name: 'price_indication', active: false },
+      { name: 'quote_received', active: true },
+      { name: 'approved_quote', active: true, note: 'automated' }
+    ],
+    altTerminal: { name: 'declined', active: true, note: 'programmatic' },
+    desc: 'Nearly instant. Fully automated transition possible.'
+  }
+];
+
+const IQ_VALIDATION_PIPELINES = [
+  {
+    label: 'Brokered Quotes',
+    color: 'var(--accent)',
+    bg: 'var(--accent-dim)',
+    pipeline: 'Son-of-Atlas 4-Agent Pipeline',
+    steps: [
+      { name: 'Extraction', desc: 'Parse quote document into structured data' },
+      { name: 'QA (10-dim)', desc: 'PASS / FAIL / REVIEW_REQUIRED across 10 quality dimensions' },
+      { name: 'Comparison', desc: 'Compare extracted quote against submission parameters' },
+      { name: 'UW Matcher', desc: 'Match to underwriter and validate carrier appetite' }
+    ],
+    output: 'Quote.Verification JSONB populated with validation result',
+    review: 'Manual operator review via MegaBro quote builder',
+    flow: 'quote_received \u2192 validation runs \u2192 approved_quote or disqualified_quote'
+  },
+  {
+    label: 'Portal (Instant Quotes)',
+    color: 'var(--orange)',
+    bg: '#5c3012',
+    pipeline: 'Atlas-Lackey IQ Validator',
+    steps: [
+      { name: 'GPT-4o Policy Engine', desc: 'Evaluate quote against policy rules' },
+      { name: 'WC Payroll Check', desc: 'Verify payroll classification codes' },
+      { name: 'Portal Red Flags', desc: 'Check for known portal issues and exclusions' },
+      { name: 'State Minimums', desc: 'Validate against state minimum premium requirements' }
+    ],
+    output: 'Verdicts: auto_approve, needs_rework, needs_review',
+    review: 'Faster path \u2014 many auto_approve',
+    flow: 'quote_received \u2192 IQ validator \u2192 approved_quote (fast) or disqualified_quote'
+  },
+  {
+    label: 'API / CoverForce',
+    color: 'var(--green)',
+    bg: 'var(--green-dim)',
+    pipeline: 'Rules Engine (GARP) + Auto-Validate',
+    steps: [
+      { name: 'Pre-Qualification', desc: 'GARP rules engine checks eligibility before API call' },
+      { name: 'API Response Parse', desc: 'Structured response \u2014 minimal extraction needed' },
+      { name: 'Auto-Validate', desc: 'Programmatic validation of structured fields' }
+    ],
+    output: 'Validation mostly automated',
+    review: 'Minimal human involvement',
+    flow: 'quote_received \u2192 auto-validate \u2192 approved_quote'
+  }
+];
+
+const IQ_MISSING_PIECES = [
+  { text: 'PlacementIntent needs a <code>channel</code> field (brokered, instant_quote_portal, coverforce_api)', priority: 'high' },
+  { text: '<code>ensureSubmissionIntent</code> always sets <code>FlowTraditional</code> \u2014 needs <code>FlowInstantQuote</code> support', priority: 'high' },
+  { text: '<code>ensurePlacementIntent</code> always starts at <code>waiting_for_uw</code> \u2014 needs fast-track for portal', priority: 'high' },
+  { text: 'Process Manager has no <code>EntityInstantQuote</code> handler', priority: 'medium' },
+  { text: '<code>BindingIntent.QuoteSource = "instant_quote"</code> exists but is never set', priority: 'medium' },
+  { text: 'Legacy InstantQuote entity needs migration path to new RFQ system', priority: 'low' },
+  { text: '<code>Quote.Verification</code> JSONB schema needs to be defined', priority: 'low' }
+];
+
+function buildInstantQuotes() {
+  // ── Section 1: Two Parallel Systems ──
+  const systemsEl = document.getElementById('iq-parallel-systems');
+  systemsEl.innerHTML = `
+    <div style="flex:1; min-width:300px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+        <span style="font-size:9px; font-weight:700; color:var(--red); background:var(--red-dim); padding:2px 8px; border-radius:3px;">LEGACY</span>
+        <span style="font-size:14px; font-weight:600;">InstantQuote Entity</span>
+      </div>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">Migration 018 &mdash; <code>insurance.instant_quote</code></p>
+      <ul style="font-size:11px; color:var(--text-dim); list-style:none; display:flex; flex-direction:column; gap:6px;">
+        <li>Standalone sidecar per SubmissionIntent</li>
+        <li>Own state machine: ready &rarr; in_progress &rarr; quote_received &rarr; accepted &rarr; approved / declined / cancelled</li>
+        <li><strong style="color:var(--red);">NOT</strong> connected to Process Manager, RFQ system, or PlacementIntent</li>
+        <li>Used by BigBrother IQ kanban</li>
+        <li style="margin-top:6px; color:var(--text);">Fields: <code style="font-size:10px;">${IQ_LEGACY_FIELDS.join(', ')}</code></li>
+      </ul>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:center; min-width:60px;">
+      <div style="background:var(--red-dim); border:1px solid var(--red); border-radius:6px; padding:6px 12px; font-size:11px; font-weight:700; color:var(--red); text-align:center;">
+        GAP
+      </div>
+    </div>
+    <div style="flex:1; min-width:300px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+        <span style="font-size:9px; font-weight:700; color:var(--green); background:var(--green-dim); padding:2px 8px; border-radius:3px;">NEW</span>
+        <span style="font-size:14px; font-weight:600;">RFQ System with Channel</span>
+      </div>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">Migration 079+ &mdash; <code>RFQ.channel</code></p>
+      <ul style="font-size:11px; color:var(--text-dim); list-style:none; display:flex; flex-direction:column; gap:6px;">
+        <li>RFQ.channel: <code>"brokered"</code> | <code>"instant_quote_portal"</code> | <code>"coverforce_api"</code></li>
+        <li>Uses standard RFQLineItemMachine</li>
+        <li>Connected to Quote entity</li>
+        <li>Intended long-term model</li>
+        <li style="margin-top:6px; color:var(--text);"><code>portal_name</code>, <code>portal_url</code> on RFQ entity</li>
+      </ul>
+    </div>
+  `;
+
+  // ── Section 2: InstantQuote State Machine ──
+  const smEl = document.getElementById('iq-state-machine');
+  const stateOrder = ['ready', 'in_progress', 'quote_received', 'accepted', 'declined', 'approved', 'cancelled'];
+  const terminals = ['declined', 'approved', 'cancelled'];
+
+  // Build SVG-like state diagram with clickable states
+  let smHTML = '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">';
+  stateOrder.forEach(s => {
+    const st = IQ_LEGACY_STATES[s];
+    const isTerm = terminals.includes(s);
+    const isInitial = s === 'ready';
+    smHTML += `
+      <div class="iq-state-btn" data-state="${s}" style="cursor:pointer; padding:8px 14px; background:${st.bg}; border:2px solid ${st.color}; border-radius:6px; font-size:11px; font-weight:600; color:${st.color}; transition:all 0.15s; position:relative;">
+        ${isInitial ? '<span style="position:absolute; top:-8px; left:4px; font-size:8px; color:var(--text-dim);">initial</span>' : ''}
+        ${s}
+        ${isTerm ? '<span style="position:absolute; bottom:-8px; right:4px; font-size:8px; color:var(--text-dim);">terminal</span>' : ''}
+      </div>
+    `;
+  });
+  smHTML += '</div>';
+
+  // Transition arrows
+  smHTML += '<div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px;">';
+  smHTML += '<div style="font-size:11px; font-weight:600; margin-bottom:8px; color:var(--text-dim);">Transitions</div>';
+  Object.entries(IQ_LEGACY_TRANSITIONS).forEach(([from, targets]) => {
+    targets.forEach(to => {
+      const fromSt = IQ_LEGACY_STATES[from];
+      const toSt = IQ_LEGACY_STATES[to];
+      smHTML += `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <span style="font-size:10px; color:${fromSt.color}; background:${fromSt.bg}; padding:2px 6px; border-radius:3px; min-width:90px; text-align:center;">${from}</span>
+          <span style="color:var(--text-dim); font-size:10px;">\u2192</span>
+          <span style="font-size:10px; color:${toSt.color}; background:${toSt.bg}; padding:2px 6px; border-radius:3px; min-width:90px; text-align:center;">${to}</span>
+        </div>
+      `;
+    });
+  });
+  smHTML += '</div>';
+
+  // Definition panel
+  smHTML += '<div id="iq-state-detail" style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:16px; font-size:12px; color:var(--text-dim);">Click a state above to see its definition.</div>';
+  smEl.innerHTML = smHTML;
+
+  // Click handlers for state buttons
+  document.querySelectorAll('.iq-state-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = btn.dataset.state;
+      const st = IQ_LEGACY_STATES[s];
+      const det = document.getElementById('iq-state-detail');
+      det.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <span style="font-size:11px; font-weight:700; color:${st.color}; background:${st.bg}; padding:3px 10px; border-radius:4px;">${s}</span>
+          ${terminals.includes(s) ? '<span style="font-size:9px; color:var(--red); background:var(--red-dim); padding:2px 6px; border-radius:3px;">terminal</span>' : ''}
+          ${s === 'ready' ? '<span style="font-size:9px; color:var(--accent); background:var(--accent-dim); padding:2px 6px; border-radius:3px;">initial</span>' : ''}
+        </div>
+        <p style="color:var(--text);">${st.desc}</p>
+        ${IQ_LEGACY_TRANSITIONS[s] ? '<p style="margin-top:8px; font-size:11px;">Transitions to: ' + IQ_LEGACY_TRANSITIONS[s].map(t => '<code style="color:' + IQ_LEGACY_STATES[t].color + ';">' + t + '</code>').join(', ') + '</p>' : '<p style="margin-top:8px; font-size:11px; color:var(--text-dim);">No outgoing transitions (terminal state).</p>'}
+      `;
+      document.querySelectorAll('.iq-state-btn').forEach(b => b.style.opacity = b.dataset.state === s ? '1' : '0.5');
+    });
+  });
+
+  // ── Section 3: PI v2 Channel Paths ──
+  const pathsEl = document.getElementById('iq-channel-paths');
+  pathsEl.innerHTML = IQ_CHANNEL_PATHS.map(ch => {
+    const statesHTML = ch.states.map((s, i) => {
+      const arrow = i < ch.states.length - 1 ? '<span style="color:var(--text-dim); font-size:14px; margin:0 2px;">\u2192</span>' : '';
+      if (s.active) {
+        return `
+          <span style="font-size:10px; font-weight:600; color:${ch.color}; background:${ch.bg}; padding:4px 10px; border-radius:4px; white-space:nowrap;">
+            ${s.name}${s.note ? ' <span style="font-size:8px; opacity:0.7;">(' + s.note + ')</span>' : ''}
+          </span>${arrow}`;
+      } else {
+        return `
+          <span style="font-size:10px; color:var(--text-dim); opacity:0.3; padding:4px 10px; border-radius:4px; border:1px dashed var(--border); text-decoration:line-through; white-space:nowrap;">
+            ${s.name}
+          </span>${arrow}`;
+      }
+    }).join('');
+
+    const altHTML = ch.altTerminal ? `
+      <div style="margin-top:8px; display:flex; align-items:center; gap:6px; font-size:10px; color:var(--text-dim);">
+        <span style="margin-left:16px;">or</span>
+        <span style="font-size:10px; font-weight:600; color:${ch.color}; background:${ch.bg}; padding:4px 10px; border-radius:4px;">submitted</span>
+        <span style="color:var(--text-dim); font-size:14px;">\u2192</span>
+        <span style="font-size:10px; font-weight:600; color:var(--red); background:var(--red-dim); padding:4px 10px; border-radius:4px;">
+          ${ch.altTerminal.name} <span style="font-size:8px; opacity:0.7;">(${ch.altTerminal.note})</span>
+        </span>
+      </div>` : '';
+
+    return `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <span style="font-size:12px; font-weight:700; color:${ch.color};">${ch.label}</span>
+          <span style="font-size:9px; color:var(--text-dim); background:var(--surface2); padding:2px 8px; border-radius:3px;">${ch.timing}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+          ${statesHTML}
+        </div>
+        ${altHTML}
+        <p style="font-size:10px; color:var(--text-dim); margin-top:10px;">${ch.desc}</p>
+      </div>
+    `;
+  }).join('');
+
+  // ── Section 4: Quote Validation Integration ──
+  const valEl = document.getElementById('iq-validation');
+  valEl.innerHTML = IQ_VALIDATION_PIPELINES.map(v => `
+    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+        <span style="font-size:12px; font-weight:700; color:${v.color};">${v.label}</span>
+      </div>
+      <div style="font-size:10px; font-weight:600; color:var(--text-dim); margin-bottom:10px; background:${v.bg}; padding:4px 8px; border-radius:4px; display:inline-block; color:${v.color};">
+        ${v.pipeline}
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+        ${v.steps.map((s, i) => `
+          <div style="display:flex; align-items:flex-start; gap:8px;">
+            <span style="font-size:9px; font-weight:700; color:${v.color}; background:${v.bg}; padding:2px 6px; border-radius:3px; min-width:18px; text-align:center; flex-shrink:0;">${i + 1}</span>
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text);">${s.name}</div>
+              <div style="font-size:10px; color:var(--text-dim);">${s.desc}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="font-size:10px; color:var(--text-dim); border-top:1px solid var(--border); padding-top:8px;">
+        <div><strong>Output:</strong> ${v.output}</div>
+        <div><strong>Review:</strong> ${v.review}</div>
+        <div style="margin-top:4px; color:var(--text); font-family:monospace; font-size:10px;">${v.flow}</div>
+      </div>
+    </div>
+  `).join('');
+
+  // ── Section 5: Supported Portals ──
+  const portalsBody = document.getElementById('iq-portals-body');
+  portalsBody.innerHTML = IQ_PORTALS.map(p => `
+    <tr>
+      <td style="font-weight:600;">${p.portal}</td>
+      <td><code style="font-size:11px; color:var(--cyan);">${p.coverages}</code></td>
+      <td style="color:var(--text-dim); font-size:11px;">${p.notes || '\u2014'}</td>
+    </tr>
+  `).join('');
+
+  // ── Section 6: Missing Pieces ──
+  const missingEl = document.getElementById('iq-missing-pieces');
+  const priorityStyles = {
+    high:   { color: 'var(--red)',    bg: 'var(--red-dim)',    label: 'HIGH' },
+    medium: { color: 'var(--yellow)', bg: 'var(--yellow-dim)', label: 'MED' },
+    low:    { color: 'var(--text-dim)', bg: 'var(--surface2)', label: 'LOW' }
+  };
+  missingEl.innerHTML = `
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      ${IQ_MISSING_PIECES.map(p => {
+        const ps = priorityStyles[p.priority];
+        return `
+          <div style="display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 14px;">
+            <span style="font-size:9px; font-weight:700; color:${ps.color}; background:${ps.bg}; padding:2px 8px; border-radius:3px; min-width:36px; text-align:center;">${ps.label}</span>
+            <span style="font-size:11px; color:var(--text);">${p.text}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+buildInstantQuotes();
 
 // Expand/collapse CSS for MiniOrq signal cards and flows
 (function() {
