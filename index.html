@@ -597,7 +597,8 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-panel="overview">Old → New Model</div>
+  <div class="tab active" data-panel="objective">Objective</div>
+  <div class="tab" data-panel="overview">Old → New Model</div>
   <div class="tab" data-panel="hierarchy">Entity Hierarchy</div>
   <div class="tab" data-panel="placement">PI v1 (Current)</div>
   <div class="tab" data-panel="pi-v2">PI v2 (Proposed)</div>
@@ -614,9 +615,249 @@
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
+<!-- Panel 0: Objective                         -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel active" id="panel-objective">
+
+  <!-- Hero -->
+  <div style="max-width:860px; margin-bottom:40px; padding:36px; background:linear-gradient(135deg, rgba(108,140,255,0.08) 0%, rgba(167,139,250,0.06) 100%); border:1px solid rgba(108,140,255,0.25); border-radius:12px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--accent); margin-bottom:16px;">Strategic Objective</div>
+    <p style="font-size:16px; line-height:1.7; color:var(--text); font-weight:400;">
+      Build the data infrastructure that enables <strong style="color:var(--accent);">Jade</strong> — Harper's AI shopping agent — to be the sole autonomous agent that reliably carries a submission from dispatch through to a validated quote: failing gracefully, learning continuously, and working hand-in-hand with human operators to deliver <strong style="color:var(--green);">higher throughput</strong>, <strong style="color:var(--green);">faster time-to-quote</strong>, and <strong style="color:var(--green);">increased revenue</strong>.
+    </p>
+    <p style="font-size:13px; line-height:1.6; color:var(--text-dim); margin-top:16px;">
+      This is not about replacing operators. It's about giving them superpowers. Jade handles carrier follow-up, document routing, information gathering, and state tracking — so operators can focus on judgment calls, relationship building, and deal closing.
+    </p>
+  </div>
+
+  <!-- North Star Metrics -->
+  <div style="margin-bottom:40px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); margin-bottom:16px;">North Star Metrics</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; max-width:1100px;">
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; border-top:3px solid var(--accent);">
+        <div style="font-size:22px; font-weight:700; color:var(--accent); margin-bottom:6px;">Quotes / Op / Day</div>
+        <div style="font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">Throughput</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">The primary metric. More submissions processed per operator per day without adding headcount.</div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; border-top:3px solid var(--yellow);">
+        <div style="font-size:22px; font-weight:700; color:var(--yellow); margin-bottom:6px;">71.84% → 90%+</div>
+        <div style="font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">Submission → Quote Rate</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">Current rate per the Mid-Funnel plan. CEO target: 90%+ by end of Q1 2026.</div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; border-top:3px solid var(--green);">
+        <div style="font-size:22px; font-weight:700; color:var(--green); margin-bottom:6px;">Days → Hours</div>
+        <div style="font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">Time-to-Quote</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">Reduce elapsed time from dispatch to first validated quote. Customers with deadlines get same-day underwriter attention.</div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; border-top:3px solid var(--purple);">
+        <div style="font-size:22px; font-weight:700; color:var(--purple); margin-bottom:6px;">HTA Count → 0</div>
+        <div style="font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">Operator Leverage</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">Fewer manual follow-ups and escalations per placement. Every HTA resolved is a case Jade learned to own.</div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; border-top:3px solid var(--orange);">
+        <div style="font-size:22px; font-weight:700; color:var(--orange); margin-bottom:6px;">$2K → $400K/mo+</div>
+        <div style="font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">Revenue</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.5;">More quotes → more proposals → more binds → more premium. Scale to $500M/mo through AI automation, not linear hiring.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Notion Quotes -->
+  <div style="margin-bottom:40px; max-width:860px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); margin-bottom:16px;">From the Team</div>
+
+    <blockquote style="border-left:3px solid var(--accent); padding:16px 20px; margin:0 0 16px 0; background:var(--surface); border-radius:0 8px 8px 0;">
+      <p style="font-size:13px; line-height:1.6; color:var(--text); font-style:italic;">"We are leaving revenue on the table. Submissions are sitting in queue while customers call us every day asking for their quote. Some have hard deadlines — they can't get a business license, can't start a contract, can't operate — and we're not treating those differently from someone who casually submitted a form."</p>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:10px; font-style:normal;">— Dakotah, CEO · Mid-Funnel Architecture Plan, Feb 13 2026</div>
+    </blockquote>
+
+    <blockquote style="border-left:3px solid var(--purple); padding:16px 20px; margin:0 0 16px 0; background:var(--surface); border-radius:0 8px 8px 0;">
+      <p style="font-size:13px; line-height:1.6; color:var(--text); font-style:italic;">"The metric that matters: quotes per operator per day."</p>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:10px; font-style:normal;">— Parva Shah · JADE — Harper's Insurance Shopping Agent, March 2026</div>
+    </blockquote>
+
+    <blockquote style="border-left:3px solid var(--yellow); padding:16px 20px; margin:0 0 16px 0; background:var(--surface); border-radius:0 8px 8px 0;">
+      <p style="font-size:13px; line-height:1.6; color:var(--text); font-style:italic;">"Shift from processing documents one-by-one with post-hoc aggregation to an intent-based, data-centric opportunity model where Opportunity is the primary object... Field-level versioning tracks every change with provenance and confidence. Validation runs continuously as data streams in."</p>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:10px; font-style:normal;">— Tushar, CTO · Submissions Pipeline Strategy, Feb 1 2026</div>
+    </blockquote>
+
+    <blockquote style="border-left:3px solid var(--green); padding:16px 20px; margin:0 0 16px 0; background:var(--surface); border-radius:0 8px 8px 0;">
+      <p style="font-size:13px; line-height:1.6; color:var(--text); font-style:italic;">"Our goal is to scale from $5M to $500M in monthly premium through AI automation, not linear hiring."</p>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:10px; font-style:normal;">— Tushar, CTO · Engineering Memo, Oct 14 2025</div>
+    </blockquote>
+  </div>
+
+  <!-- Strategic Context -->
+  <div style="margin-bottom:40px; max-width:860px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); margin-bottom:16px;">Strategic Context</div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; display:flex; gap:16px; align-items:flex-start;">
+        <div style="font-size:20px; flex-shrink:0; width:36px; text-align:center; margin-top:2px;">1</div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:6px;">Harper is an AI-native commercial insurance brokerage</div>
+          <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">Businesses come to Harper for commercial insurance. Harper doesn't underwrite — it shops. It manages the back-and-forth with carrier underwriters until quotes come back, then pitches those quotes to customers. Three operators currently process 200–300 emails per day across Gmail, Email Bot, BigBrother, and Whisper Flow.</div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; display:flex; gap:16px; align-items:flex-start;">
+        <div style="font-size:20px; flex-shrink:0; width:36px; text-align:center; margin-top:2px;">2</div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:6px;">The old system (BigBrother) had no mid-funnel visibility</div>
+          <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">BigBrother tracked status at the account level — flat, denormalized. It had "Pending Submissions" and "Quoted" but nothing in between. No way to see what's actively being shopped, which coverage is quoted vs. pending, or which carriers have gone silent. Urgency was tracked in operator memory.</div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; display:flex; gap:16px; align-items:flex-start;">
+        <div style="font-size:20px; flex-shrink:0; width:36px; text-align:center; margin-top:2px;">3</div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:6px;">The new system (CLS + MegaBro) tracks at coverage granularity with intent machines</div>
+          <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">CLS (Coverage Lifecycle System) decomposes each submission into CoverageIntents, SubmissionIntents, PlacementIntents, and RFQ Line Items — each with its own state machine. "GL quoted, PL still pending" is now a first-class state, not an implicit gap. MegaBro is the operator UI that surfaces this granularity.</div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; display:flex; gap:16px; align-items:flex-start;">
+        <div style="font-size:20px; flex-shrink:0; width:36px; text-align:center; margin-top:2px;">4</div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:6px;">PlacementIntent is the keystone entity</div>
+          <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">PlacementIntent bridges the gap between "we sent it" and "we got an answer." It owns the shopping phase per coverage per carrier group. Without it, CLS has no durable state for the Submitted → Quoted loop — the exact loop where Harper's operational time is consumed.</div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; display:flex; gap:16px; align-items:flex-start;">
+        <div style="font-size:20px; flex-shrink:0; width:36px; text-align:center; margin-top:2px;">5</div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:6px;">Jade (harper-claw) drives placement state transitions autonomously</div>
+          <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">Jade is a long-lived Temporal workflow per account. It classifies inbound emails (carrier and customer), checks Engram for existing data before asking customers anything, batches outbound communications, and drives RFQ Line Item transitions between <code style="font-size:11px; background:var(--surface2); padding:1px 4px; border-radius:3px;">info_requested</code> ↔ <code style="font-size:11px; background:var(--surface2); padding:1px 4px; border-radius:3px;">under_review</code>. When it can't handle something, it creates a structured HTA for the operator.</div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; display:flex; gap:16px; align-items:flex-start;">
+        <div style="font-size:20px; flex-shrink:0; width:36px; text-align:center; margin-top:2px;">6</div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:6px;">MiniOrq in Agora orchestrates the business logic</div>
+          <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">MiniOrq is the Temporal workflow in Agora that consumes Relay events and auto-transitions PlacementIntent state based on CASHMONEY quote events, email classifications, and operator actions. It is the bridge between the event bus and the CLS state machines.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Incremental Rollout -->
+  <div style="margin-bottom:40px; max-width:900px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); margin-bottom:16px;">Incremental Rollout</div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px;">
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; border-top:3px solid var(--yellow);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <div style="background:rgba(251,191,36,0.15); color:var(--yellow); padding:4px 10px; border-radius:4px; font-size:11px; font-weight:700;">v0 — Now</div>
+          <div style="font-size:12px; font-weight:700; color:var(--text);">Manual Control</div>
+        </div>
+        <ul style="font-size:12px; color:var(--text-dim); line-height:1.7; padding-left:16px; margin:0;">
+          <li>Operators transition PI state manually via MegaBro</li>
+          <li>PI tracks state but humans drive all changes</li>
+          <li>Jade drafts emails but does not send autonomously</li>
+          <li>PlacementIntent state machine is defined and observable</li>
+          <li>RFQLI machine wired to CASHMONEY quote events</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; border-top:3px solid var(--accent);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <div style="background:rgba(108,140,255,0.15); color:var(--accent); padding:4px 10px; border-radius:4px; font-size:11px; font-weight:700;">v1 — Next</div>
+          <div style="font-size:12px; font-weight:700; color:var(--text);">Signal-Driven</div>
+        </div>
+        <ul style="font-size:12px; color:var(--text-dim); line-height:1.7; padding-left:16px; margin:0;">
+          <li>MiniOrq consumes Relay events and auto-transitions PI</li>
+          <li>Email classifications drive <code style="font-size:11px; background:var(--surface2); padding:1px 4px; border-radius:3px;">info_requested ↔ under_review</code></li>
+          <li>CASHMONEY quote events drive <code style="font-size:11px; background:var(--surface2); padding:1px 4px; border-radius:3px;">quoted</code> transitions</li>
+          <li>Jade sends approved follow-ups on heartbeat cadence</li>
+          <li>Operators handle HTAs — one-click resolution</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; border-top:3px solid var(--green);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <div style="background:rgba(74,222,128,0.15); color:var(--green); padding:4px 10px; border-radius:4px; font-size:11px; font-weight:700;">v2 — Future</div>
+          <div style="font-size:12px; font-weight:700; color:var(--text);">Full Jade Autonomy</div>
+        </div>
+        <ul style="font-size:12px; color:var(--text-dim); line-height:1.7; padding-left:16px; margin:0;">
+          <li>Jade manages carrier relationships end-to-end</li>
+          <li>Supplement filling from Engram data (60–80% pre-filled)</li>
+          <li>Cross-carrier deduplication: 3 carriers asking = 1 customer email</li>
+          <li>Proactive underwriter digests and status reporting</li>
+          <li>Operators focus on complex/high-value placements only</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Tab Map -->
+  <div style="margin-bottom:32px; max-width:1000px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); margin-bottom:16px;">What This Tool Documents</div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px;">
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--cyan); margin-bottom:8px;">Data Model</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+          <div style="color:var(--text); font-weight:600; margin-bottom:2px;">Old → New Model</div> BigBrother → CLS evolution<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">Entity Hierarchy</div> Account → Opp → OLI → PI → RFQLI<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">PI v1 / PI v2 / RFQLI</div> State machine definitions<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">All Machines</div> Full CLS state machine inventory
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--purple); margin-bottom:8px;">Intelligence</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+          <div style="color:var(--text); font-weight:600; margin-bottom:2px;">Email Classifications</div> How Jade classifies inbound signals<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">Harper-Claw</div> Jade's decision logic, Atlas procedures, and HTA escalation paths
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--accent); margin-bottom:8px;">Orchestration</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+          <div style="color:var(--text); font-weight:600; margin-bottom:2px;">MiniOrq (Agora)</div> Relay event → PI state transition logic<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">Instant Quotes</div> Fast-path PI transitions for bindable quotes<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">Scenario Player</div> End-to-end placement lifecycle walkthroughs
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--green); margin-bottom:8px;">Operations</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+          <div style="color:var(--text); font-weight:600; margin-bottom:2px;">Work Items</div> How operators surface and act on PI state<br>
+          <div style="color:var(--text); font-weight:600; margin-top:6px; margin-bottom:2px;">Observability</div> Logfire dashboards, span coverage, alert patterns
+        </div>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+        <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--orange); margin-bottom:8px;">Planning</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+          <div style="color:var(--text); font-weight:600; margin-bottom:2px;">Engineering TODOs</div> Incremental path from v0 to v1 to v2, prioritized by service and phase
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
 <!-- Panel 1: Old vs New Model                  -->
 <!-- ═══════════════════════════════════════════ -->
-<div class="panel active" id="panel-overview">
+<div class="panel" id="panel-overview">
   <h2 style="font-size:16px; margin-bottom:8px;">Data Model Evolution: BigBrother → CLS</h2>
   <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
     The old model tracked statuses at the <strong>account level</strong> (flat, denormalized).
