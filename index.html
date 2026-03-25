@@ -610,6 +610,7 @@
   <div class="tab" data-panel="miniorq">MiniOrq (Agora)</div>
   <div class="tab" data-panel="instant-quotes">Instant Quotes</div>
   <div class="tab" data-panel="observability">Observability</div>
+  <div class="tab" data-panel="eng-todos">Engineering TODOs</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -1413,6 +1414,53 @@
   <h2 style="font-size:16px; margin-bottom:8px; color:var(--red);">Key Gotchas</h2>
   <div id="obs-gotchas" style="max-width:760px; margin-bottom:24px;"></div>
 
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 13: Engineering TODOs               -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-eng-todos">
+  <h2 style="font-size:16px; margin-bottom:6px;">Engineering TODOs — Incremental Releases to Production MegaBro</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">
+    Sequential planning document for communicating scope to Tushar (PM).
+    Items are ordered by execution dependency — each phase unlocks the next.
+    This document distills everything documented in this tool into actionable work items.
+  </p>
+  <div style="padding:10px 14px; margin-bottom:16px; background:rgba(251,191,36,0.07); border:1px solid rgba(251,191,36,0.2); border-left:4px solid var(--yellow); border-radius:6px; font-size:11px; color:var(--text);">
+    <strong style="color:var(--yellow);">Context:</strong> MegaBro (new CRM) is currently in beta and not widely used by the team.
+    The placement lifecycle (PI v2, RFQLI derivation, live RFQ creation) does not yet exist in production.
+    All 25,440 RFQs in production were created by a one-time backfill — no runtime service is producing them.
+    This roadmap brings the full placement funnel to production in seven phases, gate-by-gate.
+  </div>
+
+  <!-- Filter controls -->
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
+    <span style="font-size:11px; color:var(--text-dim); font-weight:600;">Filter by phase:</span>
+    <div id="eng-phase-filters" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    <span style="font-size:11px; color:var(--text-dim); font-weight:600; margin-left:8px;">Service:</span>
+    <div id="eng-service-filters" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    <button id="eng-clear-filters" style="margin-left:auto; padding:4px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text-dim); font-size:11px; cursor:pointer; font-family:inherit;">Clear filters</button>
+  </div>
+
+  <!-- Table -->
+  <div style="overflow-x:auto;">
+    <table id="eng-todos-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead>
+        <tr style="background:var(--surface2);">
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; width:60px; cursor:pointer;" data-sort="phase">Phase <span class="sort-icon">↕</span></th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; min-width:180px; cursor:pointer;" data-sort="title">Title <span class="sort-icon">↕</span></th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; min-width:240px;">Description</th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; min-width:140px;">Services</th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; width:100px;">Ticket</th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; width:70px; cursor:pointer;" data-sort="priority">Priority <span class="sort-icon">↕</span></th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; width:90px; cursor:pointer;" data-sort="status">Status <span class="sort-icon">↕</span></th>
+          <th style="padding:8px 12px; border:1px solid var(--border); text-align:left; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; min-width:160px;">Notes</th>
+        </tr>
+      </thead>
+      <tbody id="eng-todos-body"></tbody>
+    </table>
+  </div>
+  <div id="eng-todos-count" style="margin-top:8px; font-size:11px; color:var(--text-dim);"></div>
 </div>
 
 <script>
@@ -6012,6 +6060,559 @@ if (gotchasEl) {
 }
 
 })(); // end buildObservability
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENGINEERING TODOs DATA + RENDERING
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ENG_PHASES = {
+  0: { label: 'Phase 0: Schema Cleanup & Foundation', color: 'var(--cyan)' },
+  1: { label: 'Phase 1: PlacementIntent v2 Implementation', color: 'var(--purple)' },
+  2: { label: 'Phase 2: Live RFQ Creation Pipeline', color: 'var(--accent)' },
+  3: { label: 'Phase 3: MiniOrq Placement Orchestration', color: 'var(--orange)' },
+  4: { label: 'Phase 4: Quote Validation Integration', color: 'var(--yellow)' },
+  5: { label: 'Phase 5: MegaBro Placements Page', color: 'var(--green)' },
+  6: { label: 'Phase 6: Observability & Production Readiness', color: 'var(--red)' },
+  7: { label: 'Phase 7: Instant Quote Unification', color: '#f472b6' },
+};
+
+const ENG_TODOS = [
+  // ── Phase 0 ────────────────────────────────────────────────────────────────
+  {
+    phase: 0, seq: 1,
+    title: 'Consolidate RFQ channels: 3 → 2',
+    desc: 'Merge instant_quote_portal and coverforce_api into a single "instant_quote" channel. The two resulting channels are: brokered (traditional UW email) and instant_quote (portals + APIs). Simplifies PI v2 channel handling.',
+    services: ['CLS', 'Agora', 'MegaBro'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Documented in Instant Quotes tab. Channel field already exists in Go entity but not in any applied migration.',
+  },
+  {
+    phase: 0, seq: 2,
+    title: 'Consolidate RFQ tables: remove CPQ two-tier',
+    desc: 'Drop cpq.request_for_quote and cpq.request_for_quote_line_item. Use insurance.rfq and insurance.rfq_line_item_v2 as the single source. Reconcile MegaBro backfill ghost tables (insurance.request_for_quote, insurance.request_for_quote_line_item — different names from the CLS migration tables).',
+    services: ['CLS', 'MegaBro'],
+    ticket: 'ENG-1795',
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Table lineage mismatch documented in Work Items tab. MegaBro backfill commit 92bc4ccb (Finn, 2026-03-17) created a parallel lineage that conflicts with CLS migrations.',
+  },
+  {
+    phase: 0, seq: 3,
+    title: 'Apply missing RFQ columns migration',
+    desc: 'Add channel, snapshot_underwriter_name, snapshot_carrier_name, snapshot_group_name, portal_name, portal_url, assigned_to, assigned_type, assigned_at, cached_status, product_sku_id to the consolidated RFQ table. All of these exist in the Go entity struct but no applied migration covers them.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'RFQ Schema Status table in Work Items tab shows all MISSING fields. Prerequisite for live RFQ creation.',
+  },
+  {
+    phase: 0, seq: 4,
+    title: 'Fix NULL opportunity scan errors',
+    desc: 'Handle NULL name and account_id in core.opportunity queries. AssembleContext fails with pgx scan error for opportunities with NULL name (e.g., opp 489296). Affects urgency-v2-recompute workflows.',
+    services: ['Agora'],
+    ticket: 'ENG-1785',
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Bug. Manifests as noisy pgx scan errors in CloudWatch for Agora workflows.',
+  },
+  {
+    phase: 0, seq: 5,
+    title: 'Fix MegaBro sync references to non-existent tables',
+    desc: 'MegaBro sync-pipeline references insurance.order_ext and insurance.v_policy_line_item_full — neither exists in any applied CLS migration. Fires every sync cycle (~every 2 min), generating noisy errors.',
+    services: ['MegaBro'],
+    ticket: 'ENG-1786',
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Bug. Not blocking but contributes to error noise. Fix by removing or stubbing missing table references.',
+  },
+
+  // ── Phase 1 ────────────────────────────────────────────────────────────────
+  {
+    phase: 1, seq: 6,
+    title: 'Implement PI v2 state machine in CLS',
+    desc: 'New states: submitted, acknowledged, under_review, info_requested, price_indication, quote_received, approved_quote, disqualified_quote, on_hold, declined, withdrawn, remarketing, rework. Remove from v1: waiting_for_uw, proposal_sent, bound, declined_all, resubmission, cancelled. Proposal_sent/bound move downstream to Quote/SalesIntent.',
+    services: ['CLS'],
+    ticket: 'ENG-1791',
+    priority: 'High',
+    status: 'In Progress',
+    notes: 'Design doc v4 created. Alignment with Finn + Giridhar completed 2026-03-25. PI v2 tab in this tool documents the full state machine.',
+  },
+  {
+    phase: 1, seq: 7,
+    title: 'Add channel field to PlacementIntent',
+    desc: 'PlacementIntent needs a channel field ("brokered" or "instant_quote") so each PI knows which path it is on. Channel determines which states are skipped (e.g., instant_quote skips info_requested and price_indication).',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Depends on Phase 0 channel consolidation. Documented in Instant Quotes tab (IQ_MISSING_PIECES). ensurePlacementIntent must set channel at creation.',
+  },
+  {
+    phase: 1, seq: 8,
+    title: 'PI → RFQLI status derivation',
+    desc: 'RFQLI.status becomes a materialized view of PI.status. No separate RFQLI state machine. The RFQLI column is kept for backward compatibility and dashboard display but is never independently transitioned. Derivation table: submitted→pending, under_review→under_review, quote_received→quoted, declined→declined, etc.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Core design decision from 2026-03-25 sync. RFQLI materialization table documented in PI v2 tab. CLS may need rfqli_id added to PI entity for 1:1 link.',
+  },
+  {
+    phase: 1, seq: 9,
+    title: 'Deprecate RFQLineItemMachine',
+    desc: 'RFQLI status is now derived from PI. Remove independent RFQLI transitions. Update Atlas-Lackey/MiniOrc and CASHMONEY to transition PI instead of RFQLI. CASHMONEY currently calls POST /rfq-items/{id}/transition — this call should become PI transition instead.',
+    services: ['CLS', 'Atlas-Lackey', 'CASHMONEY'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'After Phase 1 PI v2 is live. Coordinate with Giridhar (CASHMONEY) and Finn (CLS) to swap transition callers.',
+  },
+  {
+    phase: 1, seq: 10,
+    title: 'Update Process Manager for PI v2',
+    desc: 'ensurePlacementIntent should create PI with correct initial state (submitted) and channel. PI terminal states trigger CI phase advancement: approved_quote → sales, declined → check all PIs for remarketing eligibility, remarketing/rework → backtrack CI to submission.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'ensurePlacementIntent currently always starts at waiting_for_uw (IQ_MISSING_PIECES item). ensureSubmissionIntent always sets FlowTraditional — also needs FlowInstantQuote support.',
+  },
+
+  // ── Phase 2 ────────────────────────────────────────────────────────────────
+  {
+    phase: 2, seq: 11,
+    title: 'Wire Agora post-dispatch to create RFQs in production',
+    desc: 'Code exists (CreateRFQFromDispatchActivity) but is not running against production schema. Requires Phase 0 schema migrations to be applied first. Zero BB-triggered RFQs found in production — all 25,440 were from backfill.',
+    services: ['Agora', 'CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Production reality check in MiniOrq tab. Blocked on Phase 0 schema migrations.',
+  },
+  {
+    phase: 2, seq: 12,
+    title: 'Wire PI creation alongside RFQLI',
+    desc: 'When Agora creates an RFQ + RFQLI after dispatch, also create the corresponding PlacementIntent (1:1 with RFQLI). Today, 564 PIs in last 30 days are created at OLI level by Process Manager — not at RFQLI level via dispatch.',
+    services: ['Agora', 'CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Blocked on Phase 1 (PI v2 + channel field) and Phase 2.11 (live RFQ creation).',
+  },
+  {
+    phase: 2, seq: 13,
+    title: 'Verify BigBrother → Agora → CLS RFQ proxy',
+    desc: "BigBrother's syncCompanySubmitted calls Agora's /rfqs endpoint. Code exists but is not producing RFQs in production (zero BB-triggered RFQs). Needs end-to-end verification and integration test.",
+    services: ['BigBrother', 'Agora', 'CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'BigBrother is being deprecated. Fix if meaningful inbound volume uses this path, otherwise skip to direct CLS/MegaBro path.',
+  },
+  {
+    phase: 2, seq: 14,
+    title: 'MegaBro RFQ creation path verification',
+    desc: 'Verify MegaBro\'s direct CLS call path works with the consolidated schema (Phase 0). MegaBro currently writes to a different table lineage (insurance.request_for_quote) than CLS migrations (insurance.rfq).',
+    services: ['MegaBro', 'CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Table lineage mismatch is the core risk. After Phase 0 consolidation, confirm MegaBro writes to the canonical table.',
+  },
+
+  // ── Phase 3 ────────────────────────────────────────────────────────────────
+  {
+    phase: 3, seq: 15,
+    title: 'Agora consumes relay.lifecycle for RFQLI/Quote transitions',
+    desc: 'When CASHMONEY transitions an RFQLI to "quoted" (via lifecycle event), MiniOrq reacts by transitioning the corresponding PI to quote_received. Signal taxonomy: ~2 core signals (quote_received, quote_declined) + TBD (info_requested, docs_submitted, escalation_needed).',
+    services: ['Agora'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Signal source: relay.lifecycle topic. Relay topic for placement signals (TBD in MiniOrq tab) must be defined first.',
+  },
+  {
+    phase: 3, seq: 16,
+    title: 'Agora consumes relay.comms for placement-level emails',
+    desc: 'Email classifications that route to comms.placement (SUBMISSION_TO_QUOTE, SUBMISSION) and comms.quote (INSURANCE_QUOTE, INSURANCE_DECLINE) are not yet consumed by Agora for PI transitions. These mid-funnel signals drive PI state changes.',
+    services: ['Agora'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Routing table in Email Classifications tab. CASHMONEY handles comms.quote for RFQLI transitions. Agora handles PI transitions separately.',
+  },
+  {
+    phase: 3, seq: 17,
+    title: 'Manual PI transitions via MegaBro',
+    desc: 'Operators need buttons to manually advance, pause, and revert PI status on the /placements page. v0.0 is manual-only — no automated signals. Requires CLS transition endpoint for PI (POST /placements/{id}/transition).',
+    services: ['MegaBro', 'CLS'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Blocked on Phase 5 (MegaBro placements page). on_hold state must suppress automated communications from harper-claw when set.',
+  },
+  {
+    phase: 3, seq: 18,
+    title: 'Placement work items in CLS',
+    desc: 'Create core.work_item entries with kind=assignment and kind=task for entity_type=placement_intent. Auto-create follow-up tasks on SLA breach. Today there are ZERO work items for the placement phase (gap callout in Work Items tab).',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Work items exist for intake, submission, renewal, order — but not placement. See "Gap: No Placement Work Items Yet" section in Work Items tab.',
+  },
+
+  // ── Phase 4 ────────────────────────────────────────────────────────────────
+  {
+    phase: 4, seq: 19,
+    title: 'Define Quote.Verification JSONB schema',
+    desc: 'Structure for validation verdicts from Son-of-Atlas or Atlas-Lackey: auto_approve, needs_rework, needs_review, confidence score, blockers list. Schema must be defined before wiring validation into the PI flow.',
+    services: ['CLS'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Listed in IQ_MISSING_PIECES in Instant Quotes tab. Aryan + Atmody have existing validation infra to integrate.',
+  },
+  {
+    phase: 4, seq: 20,
+    title: 'Wire quote validation into PI flow',
+    desc: 'When PI reaches quote_received, trigger Quote validation (pending_validation → pending_decision). Validation result determines next PI state: approved_quote (auto-approved or human-approved) vs disqualified_quote (validation failed). Gate blocks PI from advancing until verdict is in.',
+    services: ['Agora', 'CLS', 'Atlas-Lackey'],
+    ticket: null,
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'Planned item in observability section. Quote validation gate (quoted → proposal_sent) carries forward to PI v2 (quote_received → approved_quote). Aryan/Atmody own validation infra.',
+  },
+  {
+    phase: 4, seq: 21,
+    title: 'Deprecate harper-claw HTA in favor of CLS work items',
+    desc: 'Harper Team Action (FORM_FILL_REQUIRED, UW_CONCERN_ESCALATION, etc.) should create core.work_item entries instead of HTA escalations. This closes the loop between harper-claw email classification and the CLS task system.',
+    services: ['Harper-Claw', 'CLS'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'Harper-Claw tab documents all HTA subtypes. Currently HTAs are standalone signals; this wires them to trackable work items in CLS.',
+  },
+
+  // ── Phase 5 ────────────────────────────────────────────────────────────────
+  {
+    phase: 5, seq: 22,
+    title: 'Fix lifecycle sync cron + add placement-intent to sync',
+    desc: 'Sync runs at startup only, not on a cron. placement-intent is not in the 16 synced entities. HARD BLOCKER for all placements work. Verified empirically via CloudWatch. Without this, the MegaBro placements page shows stale data.',
+    services: ['MegaBro'],
+    ticket: 'ENG-1787',
+    priority: 'High',
+    status: 'Not Started',
+    notes: 'HARD BLOCKER — nothing on the placements page works without live sync. Fix cron schedule + add PlacementIntent and CoverageIntent to entity list.',
+  },
+  {
+    phase: 5, seq: 23,
+    title: 'Enrich placements page',
+    desc: 'Add SLA indicators, carrier detail columns, quote info, PI v2 status display, and channel badges. The /placements skeleton exists but is not operationally useful. SheetPage system auto-renders from seed definitions — add placement-specific views.',
+    services: ['MegaBro'],
+    ticket: 'ENG-1788',
+    priority: 'High',
+    status: 'Blocked',
+    notes: 'Blocked on ENG-1787 (lifecycle sync). See observability section for current service state.',
+  },
+  {
+    phase: 5, seq: 24,
+    title: 'RFQ drill-down in placements side panel',
+    desc: 'Show RFQLI statuses, carrier details, quote info, and price indications per coverage line in the placements side panel. Gives operators full placement visibility per submission.',
+    services: ['MegaBro'],
+    ticket: 'ENG-1790',
+    priority: 'High',
+    status: 'Blocked',
+    notes: 'Blocked on ENG-1787. Requires Phase 0 schema consolidation so RFQLI data is queryable from consolidated tables.',
+  },
+  {
+    phase: 5, seq: 25,
+    title: 'Bulk actions on placements page',
+    desc: 'Bulk pause (→ on_hold), bulk remarket, bulk reassign for multiple PlacementIntents at once. Operators frequently need to apply the same action across many placements.',
+    services: ['MegaBro'],
+    ticket: 'ENG-1789',
+    priority: 'Med',
+    status: 'Blocked',
+    notes: 'Blocked on ENG-1788 (placements page enrichment).',
+  },
+  {
+    phase: 5, seq: 26,
+    title: 'Remarketing surface on placements page',
+    desc: '"All Declined" indicator when all PIs for an OLI are declined, decline reasons grouped by category, and remarket button that triggers the CLS backtrack (placement → submission, new SI with submission_type=remarketing).',
+    services: ['MegaBro'],
+    ticket: 'ENG-1792',
+    priority: 'Med',
+    status: 'Blocked',
+    notes: 'Blocked on ENG-1788. Decline categories (appetite, class_of_business, loss_history, etc.) must be surfaced to help operators target E&S markets.',
+  },
+
+  // ── Phase 6 ────────────────────────────────────────────────────────────────
+  {
+    phase: 6, seq: 27,
+    title: 'Add Logfire/OTEL to CASHMONEY',
+    desc: 'CASHMONEY currently emits slog JSON to CloudWatch only. Needs structured tracing (Logfire/OTEL) before it handles live placement volume. Without traces, debugging quote matching failures and RFQLI transition failures is extremely hard.',
+    services: ['CASHMONEY'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Observability tab shows CASHMONEY as CloudWatch-only. Logfire project already used by Agora — same token/project or separate per the 3-environment decision.',
+  },
+  {
+    phase: 6, seq: 28,
+    title: 'Add Logfire/OTEL to Integrations service',
+    desc: 'Integrations is a pre-production service (dev-only, no ECS deployment). Needs observability instrumented before deploy so the first production run is visible. Enables debugging of instant-quote portal calls.',
+    services: ['Integrations'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Observability tab: Integrations service is NOT deployed to production. See MEMORY.md for Logfire environment strategy (3 options).',
+  },
+  {
+    phase: 6, seq: 29,
+    title: 'MegaBro observability hardening',
+    desc: 'OTEL is optional/commented-out in MegaBro. Enable structured tracing for production. Without it, MegaBro sync issues (like ENG-1787) are hard to diagnose beyond CloudWatch raw logs.',
+    services: ['MegaBro'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Observability tab documents MegaBro as CloudWatch + optional OTEL. Must be enabled before MegaBro placements page goes to wide use.',
+  },
+  {
+    phase: 6, seq: 30,
+    title: 'Deploy Integrations service to ECS',
+    desc: 'Integrations service currently runs in dev only — no production deployment, no Terraform resources, no CI/CD pipeline. Needed to serve instant-quote portal calls from Agora workflows in production.',
+    services: ['Integrations'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Gotcha in Observability tab: "Integrations service is NOT deployed. Runs in dev only — no CloudWatch log group exists in production."',
+  },
+  {
+    phase: 6, seq: 31,
+    title: 'Production smoke tests',
+    desc: 'Automated verification that: RFQs are being created after dispatch, PIs are transitioning in response to signals, quotes are flowing through validation. Prevents silent regression when schema changes are applied.',
+    services: ['Agora', 'CLS', 'CASHMONEY', 'MegaBro'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'Can be implemented as Temporal test workflows or Agora integration tests (make test-db pattern).',
+  },
+
+  // ── Phase 7 ────────────────────────────────────────────────────────────────
+  {
+    phase: 7, seq: 32,
+    title: 'Deprecate legacy InstantQuote entity',
+    desc: 'Migrate from insurance.instant_quote (Migration 018 standalone sidecar) to the RFQ system with channel=instant_quote. Legacy entity is not connected to Process Manager, RFQ system, or PlacementIntent. BigBrother IQ kanban currently uses it.',
+    services: ['CLS', 'BigBrother', 'MegaBro'],
+    ticket: null,
+    priority: 'Low',
+    status: 'Not Started',
+    notes: 'BigBrother is being deprecated — coordinate to sunset IQ kanban alongside legacy entity. Two parallel systems documented in Instant Quotes tab.',
+  },
+  {
+    phase: 7, seq: 33,
+    title: 'Wire Integrations service into placement flow',
+    desc: 'Agora calls Integrations gRPC for instant-quote portal submissions, receives results, and creates RFQ + PI in CLS with channel=instant_quote. This completes the automated instant-quote pipeline.',
+    services: ['Agora', 'Integrations'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'Blocked on Phase 6 (Integrations ECS deploy). ensureSubmissionIntent always sets FlowTraditional today — needs FlowInstantQuote support (IQ_MISSING_PIECES).',
+  },
+  {
+    phase: 7, seq: 34,
+    title: 'Fast-track PI for instant quotes',
+    desc: 'Portal quotes skip intermediate negotiation states (no info_requested, no price_indication). PI goes submitted → quote_received → approved_quote in seconds. Process Manager must detect channel=instant_quote and skip inapplicable state transitions.',
+    services: ['CLS', 'Agora'],
+    ticket: null,
+    priority: 'Med',
+    status: 'Not Started',
+    notes: 'PI v2 channel paths tab documents the three paths and which states each skips. ensurePlacementIntent currently always starts at waiting_for_uw — must be updated for fast-track.',
+  },
+];
+
+(function buildEngTodos() {
+  const panel = document.getElementById('panel-eng-todos');
+  if (!panel) return;
+
+  const PRIORITY_ORDER = { 'High': 0, 'Med': 1, 'Low': 2 };
+  const STATUS_STYLES_ENG = {
+    'Not Started': { bg: 'var(--surface2)', color: 'var(--text-dim)' },
+    'In Progress': { bg: 'var(--accent-dim)', color: 'var(--accent)' },
+    'Blocked':     { bg: 'var(--red-dim)', color: 'var(--red)' },
+    'Done':        { bg: 'var(--green-dim)', color: 'var(--green)' },
+  };
+  const PRIORITY_STYLES = {
+    'High': { bg: 'rgba(248,113,113,0.15)', color: 'var(--red)' },
+    'Med':  { bg: 'rgba(251,191,36,0.12)', color: 'var(--yellow)' },
+    'Low':  { bg: 'rgba(139,144,165,0.12)', color: 'var(--text-dim)' },
+  };
+  const SERVICE_COLORS = {
+    'CLS':          { bg: 'rgba(108,140,255,0.15)', color: 'var(--accent)' },
+    'Agora':        { bg: 'rgba(167,139,250,0.15)', color: 'var(--purple)' },
+    'MegaBro':      { bg: 'rgba(74,222,128,0.15)', color: 'var(--green)' },
+    'CASHMONEY':    { bg: 'rgba(34,211,238,0.15)', color: 'var(--cyan)' },
+    'Harper-Claw':  { bg: 'rgba(251,146,60,0.15)', color: 'var(--orange)' },
+    'Atlas-Lackey': { bg: 'rgba(167,139,250,0.12)', color: 'var(--purple)' },
+    'Integrations': { bg: 'rgba(251,191,36,0.12)', color: 'var(--yellow)' },
+    'BigBrother':   { bg: 'rgba(248,113,113,0.12)', color: 'var(--red)' },
+  };
+
+  const LINEAR_BASE = 'https://linear.app/harper-insurance/issue/';
+
+  let activePhases = new Set();
+  let activeServices = new Set();
+  let sortCol = 'phase';
+  let sortDir = 1;
+
+  function serviceBadge(s) {
+    const st = SERVICE_COLORS[s] || { bg: 'rgba(139,144,165,0.1)', color: 'var(--text-dim)' };
+    return `<span style="display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; background:${st.bg}; color:${st.color}; margin:1px 2px 1px 0; white-space:nowrap;">${s}</span>`;
+  }
+
+  function ticketBadge(t) {
+    if (!t) return `<span style="color:var(--text-dim); font-size:11px;">–</span>`;
+    return `<a href="${LINEAR_BASE}${t}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:11px; font-weight:600; white-space:nowrap;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${t} ↗</a>`;
+  }
+
+  function renderRows(todos) {
+    const tbody = document.getElementById('eng-todos-body');
+    const count = document.getElementById('eng-todos-count');
+    if (!tbody) return;
+
+    let lastPhase = null;
+    let html = '';
+
+    todos.forEach(item => {
+      const ph = ENG_PHASES[item.phase];
+      // Phase header row
+      if (item.phase !== lastPhase) {
+        lastPhase = item.phase;
+        html += `
+          <tr>
+            <td colspan="8" style="padding:10px 12px 6px; background:var(--bg); border:1px solid var(--border); border-top:2px solid ${ph.color};">
+              <span style="font-size:12px; font-weight:700; color:${ph.color};">${ph.label}</span>
+            </td>
+          </tr>
+        `;
+      }
+
+      const ss = STATUS_STYLES_ENG[item.status] || STATUS_STYLES_ENG['Not Started'];
+      const ps = PRIORITY_STYLES[item.priority] || PRIORITY_STYLES['Low'];
+
+      html += `
+        <tr style="border-bottom:1px solid var(--border); cursor:pointer;" class="eng-todo-row" data-seq="${item.seq}">
+          <td style="padding:8px 12px; border:1px solid var(--border); color:var(--text-dim); font-size:11px; text-align:center;">
+            <span style="font-weight:700; color:${ph.color};">P${item.phase}</span>
+            <span style="display:block; color:var(--text-dim); font-size:10px;">#${item.seq}</span>
+          </td>
+          <td style="padding:8px 12px; border:1px solid var(--border); font-weight:600; font-size:12px;">${item.title}</td>
+          <td style="padding:8px 12px; border:1px solid var(--border); font-size:11px; color:var(--text-dim); line-height:1.5;">${item.desc}</td>
+          <td style="padding:8px 12px; border:1px solid var(--border);">${item.services.map(serviceBadge).join('')}</td>
+          <td style="padding:8px 12px; border:1px solid var(--border);">${ticketBadge(item.ticket)}</td>
+          <td style="padding:8px 12px; border:1px solid var(--border);">
+            <span style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; background:${ps.bg}; color:${ps.color};">${item.priority}</span>
+          </td>
+          <td style="padding:8px 12px; border:1px solid var(--border);">
+            <span style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; background:${ss.bg}; color:${ss.color}; white-space:nowrap;">${item.status}</span>
+          </td>
+          <td style="padding:8px 12px; border:1px solid var(--border); font-size:11px; color:var(--text-dim); line-height:1.5;">${item.notes || '–'}</td>
+        </tr>
+      `;
+    });
+
+    tbody.innerHTML = html;
+    if (count) count.textContent = `Showing ${todos.length} of ${ENG_TODOS.length} items`;
+  }
+
+  function getFiltered() {
+    let result = ENG_TODOS.filter(item => {
+      if (activePhases.size > 0 && !activePhases.has(item.phase)) return false;
+      if (activeServices.size > 0 && !item.services.some(s => activeServices.has(s))) return false;
+      return true;
+    });
+
+    result = result.slice().sort((a, b) => {
+      let av, bv;
+      if (sortCol === 'phase') { av = a.phase * 100 + a.seq; bv = b.phase * 100 + b.seq; }
+      else if (sortCol === 'title') { av = a.title; bv = b.title; }
+      else if (sortCol === 'priority') { av = PRIORITY_ORDER[a.priority]; bv = PRIORITY_ORDER[b.priority]; }
+      else if (sortCol === 'status') { av = a.status; bv = b.status; }
+      else { av = a.phase * 100 + a.seq; bv = b.phase * 100 + b.seq; }
+      if (av < bv) return -1 * sortDir;
+      if (av > bv) return 1 * sortDir;
+      return (a.phase * 100 + a.seq) - (b.phase * 100 + b.seq);
+    });
+
+    return result;
+  }
+
+  function refresh() { renderRows(getFiltered()); }
+
+  // Build phase filter buttons
+  const phaseFiltersEl = document.getElementById('eng-phase-filters');
+  if (phaseFiltersEl) {
+    Object.entries(ENG_PHASES).forEach(([phNum, ph]) => {
+      const btn = document.createElement('button');
+      btn.textContent = `P${phNum}`;
+      btn.title = ph.label;
+      btn.style.cssText = `padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid ${ph.color}; color:${ph.color}; background:transparent; transition:all 0.15s;`;
+      btn.addEventListener('click', () => {
+        const p = parseInt(phNum);
+        if (activePhases.has(p)) { activePhases.delete(p); btn.style.background = 'transparent'; }
+        else { activePhases.add(p); btn.style.background = `rgba(108,140,255,0.15)`; }
+        refresh();
+      });
+      phaseFiltersEl.appendChild(btn);
+    });
+  }
+
+  // Build service filter buttons
+  const allServices = [...new Set(ENG_TODOS.flatMap(t => t.services))].sort();
+  const serviceFiltersEl = document.getElementById('eng-service-filters');
+  if (serviceFiltersEl) {
+    allServices.forEach(svc => {
+      const btn = document.createElement('button');
+      btn.textContent = svc;
+      const st = SERVICE_COLORS[svc] || { bg: 'rgba(139,144,165,0.1)', color: 'var(--text-dim)' };
+      btn.style.cssText = `padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid ${st.color}; color:${st.color}; background:transparent; transition:all 0.15s;`;
+      btn.addEventListener('click', () => {
+        if (activeServices.has(svc)) { activeServices.delete(svc); btn.style.background = 'transparent'; }
+        else { activeServices.add(svc); btn.style.background = st.bg; }
+        refresh();
+      });
+      serviceFiltersEl.appendChild(btn);
+    });
+  }
+
+  // Clear filters
+  const clearBtn = document.getElementById('eng-clear-filters');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      activePhases.clear();
+      activeServices.clear();
+      document.querySelectorAll('#eng-phase-filters button, #eng-service-filters button').forEach(b => { b.style.background = 'transparent'; });
+      refresh();
+    });
+  }
+
+  // Column sort
+  document.querySelectorAll('[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.getAttribute('data-sort');
+      if (sortCol === col) sortDir = -sortDir;
+      else { sortCol = col; sortDir = 1; }
+      document.querySelectorAll('[data-sort] .sort-icon').forEach(ic => { ic.textContent = '↕'; });
+      th.querySelector('.sort-icon').textContent = sortDir === 1 ? '↓' : '↑';
+      refresh();
+    });
+  });
+
+  refresh();
+})();
 
 </script>
 </body>
