@@ -609,6 +609,7 @@
   <div class="tab" data-panel="harper-claw">Harper-Claw</div>
   <div class="tab" data-panel="miniorq">MiniOrq (Agora)</div>
   <div class="tab" data-panel="instant-quotes">Instant Quotes</div>
+  <div class="tab" data-panel="observability">Observability</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -1351,6 +1352,67 @@
     What needs to change before the two systems can be unified.
   </p>
   <div id="iq-missing-pieces" style="max-width:900px; margin-bottom:24px;"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Panel 12: Observability                    -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="panel" id="panel-observability">
+
+  <!-- Section 1: Service Overview Table -->
+  <h2 style="font-size:16px; margin-bottom:8px;">Service Observability Overview</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:24px;">
+    Where each service lives, how to access its logs, and what tracing/workflow tooling it uses.
+  </p>
+  <div style="overflow-x:auto; margin-bottom:40px;">
+    <table class="rules-table" style="min-width:900px;">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Hosting</th>
+          <th>Log Group</th>
+          <th>Tracing</th>
+          <th>Workflow Engine</th>
+          <th>Temporal Queues</th>
+        </tr>
+      </thead>
+      <tbody id="obs-overview-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Section 2: Service Cards -->
+  <h2 style="font-size:16px; margin-bottom:8px;">Service Cards</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:20px;">
+    Quick reference for each service — hosting badge, log tail command, key env vars.
+  </p>
+  <div id="obs-service-cards" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:16px; margin-bottom:40px;"></div>
+
+  <!-- Section 3: Tracing Landscape -->
+  <h2 style="font-size:16px; margin-bottom:8px;">Tracing Landscape</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:20px;">
+    Which services emit structured traces and where to find them.
+  </p>
+  <div id="obs-tracing-groups" style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:40px; max-width:960px;"></div>
+
+  <!-- Section 4: CloudWatch Quick Reference -->
+  <h2 style="font-size:16px; margin-bottom:8px;">CloudWatch Quick Reference</h2>
+  <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
+    Copy-paste CLI commands to tail live logs for each service.
+  </p>
+  <div id="obs-cw-quick" style="max-width:760px; margin-bottom:40px;"></div>
+
+  <!-- Section 5: All Log Groups (collapsible) -->
+  <details style="margin-bottom:40px; max-width:760px;">
+    <summary style="cursor:pointer; font-size:14px; font-weight:600; color:var(--accent); padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:6px; list-style:none; display:flex; align-items:center; gap:8px;">
+      <span>&#9660;</span> All CloudWatch Log Groups
+    </summary>
+    <div id="obs-all-log-groups" style="margin-top:12px;"></div>
+  </details>
+
+  <!-- Section 6: Key Gotchas -->
+  <h2 style="font-size:16px; margin-bottom:8px; color:var(--red);">Key Gotchas</h2>
+  <div id="obs-gotchas" style="max-width:760px; margin-bottom:24px;"></div>
+
 </div>
 
 <script>
@@ -5581,6 +5643,375 @@ buildInstantQuotes();
   `;
   document.head.appendChild(style);
 })();
+
+// ═══════════════════════════════════════════════
+// OBSERVABILITY TAB
+// ═══════════════════════════════════════════════
+
+(function buildObservability() {
+
+// ── Data ─────────────────────────────────────────────────────────────────────
+
+const OBS_SERVICES = [
+  {
+    name: 'Agora',
+    hosting: 'ECS Fargate',
+    hostingTag: 'ECS',
+    cluster: 'agora-cluster',
+    logGroup: '/ecs/agora-server',
+    tracing: 'Logfire',
+    tracingNote: 'OTEL',
+    workflow: 'Temporal Cloud',
+    queues: ['agora-poller-queue', 'agora-submissions-queue', 'agora-documents-queue', 'agora-vegapunk-queue'],
+    envVars: ['LOGFIRE_TOKEN', 'TEMPORAL_CLOUD_HOST', 'DATABASE_URL'],
+    tailCmd: 'aws logs tail /ecs/agora-server --follow',
+  },
+  {
+    name: 'CLS',
+    hosting: 'ECS Fargate',
+    hostingTag: 'ECS',
+    cluster: 'cls-cluster',
+    logGroup: '/ecs/cls-api',
+    tracing: 'Logfire',
+    tracingNote: 'OTEL',
+    workflow: 'None',
+    queues: [],
+    envVars: ['LOGFIRE_TOKEN', 'DATABASE_URL'],
+    tailCmd: 'aws logs tail /ecs/cls-api --follow',
+  },
+  {
+    name: 'CASHMONEY / Antares',
+    hosting: 'ECS Fargate',
+    hostingTag: 'ECS',
+    cluster: 'antares',
+    logGroup: '/ecs/antares',
+    tracing: 'None',
+    tracingNote: 'slog JSON only',
+    workflow: 'None (Kafka consumer)',
+    queues: [],
+    envVars: ['KAFKA_BROKERS', 'DATABASE_URL'],
+    tailCmd: 'aws logs tail /ecs/antares --follow',
+  },
+  {
+    name: 'Zephyrus',
+    hosting: 'Astronomer Cloud',
+    hostingTag: 'Astronomer',
+    cluster: 'debsmo0h',
+    logGroup: '— (Astronomer UI only)',
+    tracing: 'None',
+    tracingNote: 'Astronomer UI',
+    workflow: 'Airflow DAGs',
+    queues: [],
+    envVars: ['AIRFLOW__CORE__FERNET_KEY'],
+    tailCmd: '# Astronomer UI: https://cmcyz07pt12hn01nz5c12afi1.astronomer.run/debsmo0h/dags',
+  },
+  {
+    name: 'Hermes',
+    hosting: 'ECS Fargate',
+    hostingTag: 'ECS',
+    cluster: 'hermes-cluster',
+    logGroup: '/ecs/harper-ml-service',
+    tracing: 'Logfire',
+    tracingNote: 'native Python SDK',
+    workflow: 'None',
+    queues: [],
+    envVars: ['LOGFIRE_TOKEN'],
+    tailCmd: 'aws logs tail /ecs/harper-ml-service --follow',
+    note: 'ECS name is harper-ml-service — NOT hermes',
+  },
+  {
+    name: 'MegaBro',
+    hosting: 'ECS Fargate',
+    hostingTag: 'ECS',
+    cluster: 'megabro-cluster',
+    logGroup: '/ecs/megabro-web',
+    tracing: 'OTEL (optional)',
+    tracingNote: 'optional',
+    workflow: 'Temporal (optional)',
+    queues: ['data-sync'],
+    envVars: ['OTEL_EXPORTER_OTLP_ENDPOINT'],
+    tailCmd: 'aws logs tail /ecs/megabro-web --follow',
+  },
+  {
+    name: 'Atlas-Lackey',
+    hosting: 'ECS Fargate',
+    hostingTag: 'ECS',
+    cluster: 'atlas-cluster',
+    logGroup: '/ecs/atlas-lackey',
+    tracing: 'Langfuse',
+    tracingNote: 'LLM trace observability',
+    workflow: 'Temporal + NATS',
+    queues: ['agent-execution'],
+    envVars: ['LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY', 'NATS_URL'],
+    tailCmd: 'aws logs tail /ecs/atlas-lackey --follow',
+  },
+  {
+    name: 'Integrations',
+    hosting: 'Not deployed (dev)',
+    hostingTag: 'dev',
+    cluster: '—',
+    logGroup: '—',
+    tracing: 'None',
+    tracingNote: 'dev only',
+    workflow: 'Temporal',
+    queues: ['integrations-tasks'],
+    envVars: [],
+    tailCmd: '# Not deployed — dev environment only',
+    note: 'NOT deployed yet — dev only',
+  },
+  {
+    name: 'Harper-Claw',
+    hosting: 'Cloudflare Workers',
+    hostingTag: 'Cloudflare',
+    cluster: '—',
+    logGroup: '— (Cloudflare Dashboard)',
+    tracing: 'CF built-in',
+    tracingNote: 'Cloudflare built-in',
+    workflow: 'None (E2B / Kafka)',
+    queues: [],
+    envVars: ['CF_API_TOKEN'],
+    tailCmd: 'wrangler tail harperclaw',
+    note: 'NO CloudWatch — Cloudflare Workers only',
+  },
+];
+
+const OBS_ALL_LOG_GROUPS = {
+  'Core Services': [
+    '/ecs/agora-server',
+    '/ecs/cls-api',
+    '/ecs/antares',
+    '/ecs/megabro-web',
+    '/ecs/harper-ml-service',
+  ],
+  'Atlas Family': [
+    '/ecs/atlas-lackey',
+    '/ecs/atlas-analytics',
+    '/ecs/atlas-context',
+    '/ecs/atlas-dashboard',
+    '/ecs/atlas-nats',
+    '/ecs/atlas-orchestration',
+    '/ecs/atlas-scheduler',
+    '/ecs/atlas-task-engine',
+    '/ecs/atlas-tools',
+  ],
+  'Infrastructure': [
+    '/ecs/relay-server',
+    '/ecs/debezium-connector',
+    '/ecs/dev-event-consumer',
+  ],
+  'Other Services': [
+    '/ecs/forge',
+    '/ecs/harper-ledger',
+    '/ecs/rolodex',
+  ],
+  'Container Insights': [
+    '/aws/ecs/containerinsights/antares/performance',
+    '/aws/ecs/containerinsights/cls-cluster/performance',
+    '/aws/ecs/containerinsights/agora-cluster/performance',
+  ],
+};
+
+const OBS_GOTCHAS = [
+  { icon: '⚠', color: 'var(--red)', text: 'Hermes ECS log group is <code>/ecs/harper-ml-service</code> — NOT <code>/ecs/hermes</code>. The ECS task definition name differs from the service name.' },
+  { icon: '⚠', color: 'var(--yellow)', text: 'Zephyrus has NO CloudWatch log group. It runs on Astronomer Cloud — use the Astronomer UI or Airflow task logs.' },
+  { icon: '⚠', color: 'var(--yellow)', text: 'Harper-Claw has NO CloudWatch. It runs as Cloudflare Workers — use <code>wrangler tail harperclaw</code> or the Cloudflare Dashboard.' },
+  { icon: '⚠', color: 'var(--orange)', text: 'Integrations service is NOT deployed. It runs in dev only — no CloudWatch log group exists in production.' },
+  { icon: 'ℹ', color: 'var(--text-dim)', text: 'CASHMONEY / Antares has NO distributed tracing. Logs are structured JSON via slog — query CloudWatch Insights only.' },
+  { icon: 'ℹ', color: 'var(--purple)', text: 'Atlas-Lackey uses Langfuse (NOT Logfire) for LLM trace observability. Logfire is not instrumented on Atlas.' },
+  { icon: 'ℹ', color: 'var(--accent)', text: 'Logfire receives OTEL from Agora, CLS, and Hermes. All three land in the same Logfire project — filter by <code>service.name</code> attribute.' },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const HOST_COLORS = {
+  ECS:         { border: 'var(--accent)',  bg: 'rgba(108,140,255,0.08)', label: 'ECS Fargate',        labelColor: 'var(--accent)' },
+  Astronomer:  { border: 'var(--green)',   bg: 'rgba(74,222,128,0.07)',  label: 'Astronomer Cloud',   labelColor: 'var(--green)' },
+  Cloudflare:  { border: 'var(--purple)',  bg: 'rgba(167,139,250,0.07)', label: 'Cloudflare Workers', labelColor: 'var(--purple)' },
+  dev:         { border: 'var(--border)',  bg: 'rgba(45,51,72,0.4)',     label: 'Not Deployed',       labelColor: 'var(--text-dim)' },
+};
+
+const TRACE_BADGE = {
+  'Logfire':        { color: 'var(--green)',   bg: '#166534' },
+  'Langfuse':       { color: 'var(--orange)',  bg: '#7c2d12' },
+  'OTEL (optional)':{ color: 'var(--cyan)',    bg: '#164e63' },
+  'CF built-in':    { color: 'var(--text-dim)',bg: 'var(--surface2)' },
+  'None':           { color: 'var(--red)',     bg: '#7f1d1d' },
+};
+
+function traceBadge(tracing) {
+  const style = TRACE_BADGE[tracing] || TRACE_BADGE['None'];
+  return `<span style="font-size:9px;font-weight:700;color:${style.color};background:${style.bg};padding:2px 8px;border-radius:3px;white-space:nowrap;">${tracing}</span>`;
+}
+
+function hostBadge(tag) {
+  const h = HOST_COLORS[tag] || HOST_COLORS['ECS'];
+  return `<span style="font-size:9px;font-weight:700;color:${h.labelColor};background:${h.bg};border:1px solid ${h.border};padding:2px 8px;border-radius:3px;white-space:nowrap;">${h.label}</span>`;
+}
+
+function codeBlock(cmd) {
+  return `<pre style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:11px;color:var(--cyan);overflow-x:auto;margin:0;">${escHtml(cmd)}</pre>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Section 1: Overview Table ─────────────────────────────────────────────────
+
+const tbody1 = document.getElementById('obs-overview-body');
+if (tbody1) {
+  tbody1.innerHTML = OBS_SERVICES.map(s => `
+    <tr>
+      <td style="font-weight:600;">${s.name}</td>
+      <td>${hostBadge(s.hostingTag)}</td>
+      <td><code style="font-size:11px;color:var(--cyan);">${escHtml(s.logGroup)}</code></td>
+      <td>${traceBadge(s.tracing)} <span style="font-size:10px;color:var(--text-dim);">${s.tracingNote}</span></td>
+      <td style="font-size:11px;">${escHtml(s.workflow)}</td>
+      <td style="font-size:10px;color:var(--text-dim);">${s.queues.length ? s.queues.map(q => `<code style="color:var(--accent);background:var(--surface2);padding:1px 5px;border-radius:3px;">${q}</code>`).join(' ') : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Section 2: Service Cards ──────────────────────────────────────────────────
+
+const cardsEl = document.getElementById('obs-service-cards');
+if (cardsEl) {
+  cardsEl.innerHTML = OBS_SERVICES.map(s => {
+    const h = HOST_COLORS[s.hostingTag] || HOST_COLORS['ECS'];
+    const noteHtml = s.note
+      ? `<div style="margin-top:10px;padding:6px 10px;border-radius:4px;background:rgba(248,113,113,0.08);border:1px solid var(--red);font-size:10px;color:var(--red);">&#9888; ${escHtml(s.note)}</div>`
+      : '';
+    const envHtml = s.envVars.length
+      ? `<div style="margin-top:10px;"><span style="font-size:10px;color:var(--text-dim);">Key env vars: </span>${s.envVars.map(e => `<code style="font-size:10px;background:var(--surface2);color:var(--yellow);padding:1px 5px;border-radius:3px;">${e}</code>`).join(' ')}</div>`
+      : '';
+    const queuesHtml = s.queues.length
+      ? `<div style="margin-top:6px;"><span style="font-size:10px;color:var(--text-dim);">Temporal queues: </span>${s.queues.map(q => `<code style="font-size:10px;background:var(--surface2);color:var(--accent);padding:1px 5px;border-radius:3px;">${q}</code>`).join(' ')}</div>`
+      : '';
+    return `
+      <div style="background:var(--surface);border:1px solid ${h.border};border-left:4px solid ${h.border};border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+          <span style="font-size:14px;font-weight:700;color:var(--text);">${s.name}</span>
+          ${hostBadge(s.hostingTag)}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          ${traceBadge(s.tracing)}
+          <span style="font-size:10px;color:var(--text-dim);">${s.workflow}</span>
+        </div>
+        ${s.cluster !== '—' ? `<div style="font-size:10px;color:var(--text-dim);">Cluster: <code style="color:var(--text);">${s.cluster}</code></div>` : ''}
+        <div style="margin-top:4px;">${codeBlock(s.tailCmd)}</div>
+        ${queuesHtml}
+        ${envHtml}
+        ${noteHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Section 3: Tracing Landscape ─────────────────────────────────────────────
+
+const TRACING_GROUPS = [
+  {
+    label: 'Logfire (OTEL)',
+    color: 'var(--green)',
+    bg: 'rgba(74,222,128,0.06)',
+    border: '#166534',
+    services: ['Agora', 'CLS', 'Hermes'],
+    detail: 'Query via Logfire MCP or dashboard. Filter by service.name attribute.',
+    link: 'https://logfire.pydantic.dev',
+  },
+  {
+    label: 'Langfuse',
+    color: 'var(--orange)',
+    bg: 'rgba(251,146,60,0.06)',
+    border: '#7c2d12',
+    services: ['Atlas-Lackey'],
+    detail: 'LLM trace observability for agent execution steps.',
+    link: 'https://cloud.langfuse.com',
+  },
+  {
+    label: 'None (Logs Only)',
+    color: 'var(--text-dim)',
+    bg: 'rgba(45,51,72,0.4)',
+    border: 'var(--border)',
+    services: ['CASHMONEY / Antares', 'Zephyrus', 'Integrations', 'Harper-Claw'],
+    detail: 'No distributed tracing. Use CloudWatch Insights or platform-native logs.',
+    link: null,
+  },
+];
+
+const tracingEl = document.getElementById('obs-tracing-groups');
+if (tracingEl) {
+  tracingEl.innerHTML = TRACING_GROUPS.map(g => `
+    <div style="background:${g.bg};border:1px solid ${g.border};border-radius:8px;padding:16px;">
+      <div style="font-size:13px;font-weight:700;color:${g.color};margin-bottom:10px;">${g.label}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+        ${g.services.map(s => `<span style="font-size:12px;color:var(--text);">• ${s}</span>`).join('')}
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;">${g.detail}</div>
+      ${g.link ? `<a href="${g.link}" target="_blank" style="font-size:10px;color:${g.color};text-decoration:none;">&#8599; Open Dashboard</a>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── Section 4: CloudWatch Quick Reference ─────────────────────────────────────
+
+const CW_QUICK = [
+  { label: 'Agora',               cmd: 'aws logs tail /ecs/agora-server --follow' },
+  { label: 'CLS',                 cmd: 'aws logs tail /ecs/cls-api --follow' },
+  { label: 'CASHMONEY / Antares', cmd: 'aws logs tail /ecs/antares --follow' },
+  { label: 'Hermes',              cmd: 'aws logs tail /ecs/harper-ml-service --follow' },
+  { label: 'MegaBro',             cmd: 'aws logs tail /ecs/megabro-web --follow' },
+  { label: 'Atlas-Lackey',        cmd: 'aws logs tail /ecs/atlas-lackey --follow' },
+  { label: 'Zephyrus (Astronomer UI)', cmd: '# https://cmcyz07pt12hn01nz5c12afi1.astronomer.run/debsmo0h/dags' },
+  { label: 'Harper-Claw',         cmd: 'wrangler tail harperclaw' },
+];
+
+const cwEl = document.getElementById('obs-cw-quick');
+if (cwEl) {
+  cwEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;">` +
+    CW_QUICK.map(item => `
+      <div>
+        <div style="font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">${item.label}</div>
+        ${codeBlock(item.cmd)}
+      </div>
+    `).join('') +
+  `</div>`;
+}
+
+// ── Section 5: All Log Groups ─────────────────────────────────────────────────
+
+const allGroupsEl = document.getElementById('obs-all-log-groups');
+if (allGroupsEl) {
+  allGroupsEl.innerHTML = Object.entries(OBS_ALL_LOG_GROUPS).map(([family, groups]) => `
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${family}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${groups.map(g => `
+          <div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 12px;">
+            <code style="font-size:11px;color:var(--cyan);flex:1;">${escHtml(g)}</code>
+            <code style="font-size:10px;color:var(--text-dim);">aws logs tail ${escHtml(g)} --follow</code>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Section 6: Gotchas ───────────────────────────────────────────────────────
+
+const gotchasEl = document.getElementById('obs-gotchas');
+if (gotchasEl) {
+  gotchasEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">` +
+    OBS_GOTCHAS.map(g => `
+      <div style="display:flex;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--border);border-left:4px solid ${g.color};border-radius:6px;padding:10px 14px;">
+        <span style="font-size:14px;color:${g.color};flex-shrink:0;">${g.icon}</span>
+        <span style="font-size:12px;color:var(--text);">${g.text}</span>
+      </div>
+    `).join('') +
+  `</div>`;
+}
+
+})(); // end buildObservability
 
 </script>
 </body>
