@@ -1289,8 +1289,14 @@
 
   <!-- Section 3: PI v2 Channel Paths -->
   <h3 style="font-size:14px; margin-bottom:12px; color:var(--accent);">PI v2 Channel Paths</h3>
+  <div style="padding:10px 14px; margin-bottom:16px; border-radius:6px; border:1px solid var(--yellow); border-left:4px solid var(--yellow); background:var(--surface2); font-size:11px; color:var(--text);">
+    <strong style="color:var(--yellow);">&#9888; FUTURE:</strong> RFQ channels will be consolidated from 3 to 2.
+    <code>instant_quote_portal</code> and <code>coverforce_api</code> will be merged into a single <code>"instant_quote"</code> channel.
+    The two channels will be: <strong>brokered</strong> (traditional UW email) and <strong>instant_quote</strong> (portals + APIs).
+    This simplification means PI v2 only needs to handle two channel paths, not three.
+  </div>
   <p style="font-size:11px; color:var(--text-dim); margin-bottom:16px;">
-    PlacementIntent v2 handles three channels differently. Portal and API paths skip intermediate negotiation states.
+    PlacementIntent v2 currently handles three channels (consolidation to two planned &mdash; see note above). Portal and API paths skip intermediate negotiation states.
     Grayed-out states are skipped for that channel.
   </p>
   <div id="iq-channel-paths" style="display:flex; flex-direction:column; gap:20px; max-width:1000px; margin-bottom:32px;"></div>
@@ -2195,8 +2201,8 @@ const ENTITIES = [
       ]},
       { field: 'channel', kind: 'leaf', note: 'Set at creation — determines UX flow', values: [
         { val: 'brokered', type: 'active', note: 'Traditional broker submission via email' },
-        { val: 'instant_quote_portal', type: 'active', note: 'Carrier portal / web UI' },
-        { val: 'coverforce_api', type: 'active', note: 'Programmatic API submission' },
+        { val: 'instant_quote_portal', type: 'active', note: 'Carrier portal / web UI (merging into instant_quote)' },
+        { val: 'coverforce_api', type: 'active', note: 'Programmatic API submission (merging into instant_quote)' },
       ]},
       { field: 'assigned_type', kind: 'leaf', note: 'Who is handling this RFQ', values: [
         { val: 'human', type: 'active', note: 'Operator managing follow-up' },
@@ -5325,7 +5331,7 @@ const IQ_CHANNEL_PATHS = [
       { name: 'approved_quote', active: true }
     ],
     altTerminal: { name: 'declined', active: true, note: 'instant appetite decline' },
-    desc: 'Portals give bindable quotes or instant declines. Skips negotiation states.'
+    desc: 'Portals give bindable quotes or instant declines. Skips negotiation states. (Will merge with API path into unified "instant_quote" channel.)'
   },
   {
     label: 'API / CoverForce',
@@ -5342,9 +5348,13 @@ const IQ_CHANNEL_PATHS = [
       { name: 'approved_quote', active: true, note: 'automated' }
     ],
     altTerminal: { name: 'declined', active: true, note: 'programmatic' },
-    desc: 'Nearly instant. Fully automated transition possible.'
+    desc: 'Nearly instant. Fully automated transition possible. (Will merge with Portal path into unified "instant_quote" channel.)'
   }
 ];
+// NOTE: Portal and API paths above will be unified into a single "instant_quote"
+// channel. Both skip negotiation states; the only difference today is timing
+// (minutes vs seconds) and automation level. Post-consolidation, PI v2 handles
+// just two paths: brokered and instant_quote.
 
 const IQ_VALIDATION_PIPELINES = [
   {
@@ -5394,7 +5404,7 @@ const IQ_VALIDATION_PIPELINES = [
 ];
 
 const IQ_MISSING_PIECES = [
-  { text: 'PlacementIntent needs a <code>channel</code> field (brokered, instant_quote_portal, coverforce_api)', priority: 'high' },
+  { text: 'PlacementIntent needs a <code>channel</code> field (brokered, instant_quote_portal, coverforce_api &mdash; portal + API consolidating to <code>instant_quote</code>)', priority: 'high' },
   { text: '<code>ensureSubmissionIntent</code> always sets <code>FlowTraditional</code> \u2014 needs <code>FlowInstantQuote</code> support', priority: 'high' },
   { text: '<code>ensurePlacementIntent</code> always starts at <code>waiting_for_uw</code> \u2014 needs fast-track for portal', priority: 'high' },
   { text: 'Process Manager has no <code>EntityInstantQuote</code> handler', priority: 'medium' },
@@ -5433,7 +5443,7 @@ function buildInstantQuotes() {
       </div>
       <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px;">Migration 079+ &mdash; <code>RFQ.channel</code></p>
       <ul style="font-size:11px; color:var(--text-dim); list-style:none; display:flex; flex-direction:column; gap:6px;">
-        <li>RFQ.channel: <code>"brokered"</code> | <code>"instant_quote_portal"</code> | <code>"coverforce_api"</code></li>
+        <li>RFQ.channel: <code>"brokered"</code> | <code>"instant_quote_portal"</code> | <code>"coverforce_api"</code> <span style="font-size:9px; color:var(--yellow);">(portal + API merging into <code>"instant_quote"</code>)</span></li>
         <li>Uses standard RFQLineItemMachine</li>
         <li>Connected to Quote entity</li>
         <li>Intended long-term model</li>
@@ -5546,6 +5556,15 @@ function buildInstantQuotes() {
       </div>
     `;
   }).join('');
+
+  // Append consolidation note below the channel path diagrams
+  pathsEl.insertAdjacentHTML('afterend', `
+    <div style="padding:10px 14px; margin-bottom:32px; border-radius:6px; border:1px solid var(--yellow); border-left:4px solid var(--yellow); background:var(--surface2); font-size:11px; color:var(--text); max-width:1000px;">
+      <strong style="color:var(--yellow);">&#9888; Upcoming consolidation:</strong>
+      The Portal and API paths shown above will be unified into a single <code>"instant_quote"</code> channel.
+      Both already skip negotiation states; the primary difference (timing and automation level) will be captured as metadata rather than separate channels.
+    </div>
+  `);
 
   // ── Section 4: Quote Validation Integration ──
   const valEl = document.getElementById('iq-validation');
