@@ -8183,10 +8183,20 @@ const ENG_TODOS = [
     status: 'Not Started',
     notes: 'Can be implemented as Temporal test workflows or Agora integration tests (make test-db pattern).',
   },
+  {
+    phase: 6, seq: 32,
+    title: 'CLS: adopt migration runner + squash 127 migrations to baseline',
+    desc: 'CLS has 127 migration files with no runner, no tracking table, no CI validation, and 20 numbering collisions. Manual psql application only. A hand-maintained baseline-schema.sql (881 lines) exists and is used for local dev, bypassing all migrations. Phase 1: adopt goose/golang-migrate/Atlas + add schema_migrations tracking table + wire into Makefile and CI. Phase 2: designate baseline-schema.sql as migration 000, delete all 127 historical migrations absorbed into the baseline, keep only post-baseline deltas (130+), mark migrations 028/079/083 (never applied to prod) as skipped. Phase 3: CI job applies baseline + recent migrations to fresh Postgres 16, pg_dump --schema-only diff against baseline-schema.sql, non-empty diff = CI failure.',
+    services: ['CLS'],
+    ticket: 'ENG-1818',
+    priority: 'Med',
+    status: 'Not Started',
+    notes: '20 numbering collisions (prefixes 029-035, 049, 076-083, 086-088, 123). Gap 099–120 (22 missing numbers). Migrations 028, 079, 083 never applied to production. No down migrations. Atlas already used for core/cpq/audit schemas — evaluate for consistency.',
+  },
 
   // ── Phase 7 ────────────────────────────────────────────────────────────────
   {
-    phase: 7, seq: 32,
+    phase: 7, seq: 34,
     title: 'Deprecate legacy InstantQuote entity',
     desc: 'Migrate from insurance.instant_quote (Migration 018 standalone sidecar) to the RFQ system with channel=instant_quote. Legacy entity is not connected to Process Manager, RFQ system, or PlacementIntent. BigBrother IQ kanban currently uses it — but BigBrother is being deprecated and is NOT a backwards-compat constraint here. No production users depend on insurance.instant_quote (0 rows). Drop aggressively once PI v2 + RFQ channel consolidation is complete.',
     services: ['CLS', 'BigBrother', 'MegaBro'],
@@ -8196,7 +8206,7 @@ const ENG_TODOS = [
     notes: 'No backwards-compat obligation: BB is deprecated, MegaBro is beta, insurance.instant_quote has 0 rows in production. Full deprecation analysis in Instant Quotes tab. PI v2 + RFQ channel=instant_quote fully supersedes the IQ entity and its state machine. Can drop without migration period.',
   },
   {
-    phase: 7, seq: 33,
+    phase: 7, seq: 35,
     title: 'Wire Integrations service into placement flow',
     desc: 'Agora calls Integrations gRPC for instant-quote portal submissions, receives results, and creates RFQ + PI in CLS with channel=instant_quote. This completes the automated instant-quote pipeline.',
     services: ['Agora', 'Integrations'],
@@ -8206,7 +8216,7 @@ const ENG_TODOS = [
     notes: 'Blocked on Phase 6 (Integrations ECS deploy). ensureSubmissionIntent always sets FlowTraditional today — needs FlowInstantQuote support (IQ_MISSING_PIECES).',
   },
   {
-    phase: 7, seq: 34,
+    phase: 7, seq: 36,
     title: 'Fast-track PI for instant quotes',
     desc: 'Portal quotes skip intermediate negotiation states (no info_requested, no price_indication). PI goes submitted → quote_received → approved_quote in seconds. Process Manager must detect channel=instant_quote and skip inapplicable state transitions.',
     services: ['CLS', 'Agora'],
@@ -8218,7 +8228,7 @@ const ENG_TODOS = [
 
   // ── Phase 8: Jade Evaluation & Harper-Claw Hardening ─────────────────────
   {
-    phase: 8, seq: 35,
+    phase: 8, seq: 37,
     title: 'Jade Evaluation Framework',
     desc: 'Stratified sampling across action categories, LLM-as-judge + binary feedback interface, version control for system prompts + context injection + model params. Addresses catastrophic forgetting risk. ~100 instances of human binary feedback from Harsh available as initial eval set.',
     services: ['Harper-Claw'],
@@ -8228,7 +8238,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 Placements Architecture Discussion. Current accuracy ~85%, release gate 98%. Owner: Giridhar. Evaluation quality gates Jade autonomy — v1/v2 rollout depends on this.',
   },
   {
-    phase: 8, seq: 36,
+    phase: 8, seq: 38,
     title: 'Harper-Claw Harness Version Control',
     desc: 'DSL or system for versioning all harness variables: system prompt, context injector function, model, parameters, skill files, memory snapshots. Each version is isolated — learnings do not spill across versions. Prevents catastrophic forgetting.',
     services: ['Harper-Claw'],
@@ -8238,7 +8248,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 discussion. Formal DSL for versioning enables A/B testing of harness configs against the same eval set. Owner: Giridhar.',
   },
   {
-    phase: 8, seq: 37,
+    phase: 8, seq: 39,
     title: 'Jade Action Display in MegaBro Placements UI',
     desc: 'Show Jade actions and communications at the PlacementIntent level and aggregated across RFQs per OLI. Follow existing MegaBro CRM extension patterns. At least 1-2 days of work.',
     services: ['MegaBro', 'Harper-Claw'],
@@ -8248,7 +8258,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 discussion. Communication part of Jade works well — customer follow-ups for specific codes are precise. Display needs to surface this in placements UI.',
   },
   {
-    phase: 8, seq: 38,
+    phase: 8, seq: 40,
     title: 'Deterministic CLS Context for Harper-Claw',
     desc: 'Feed 75% deterministic CLS data (account, opportunities, RFQs, OLIs via existing CLS APIs) + 25% stochastic memory (Vegapunk) into harper-claw decisions. Enables A/B testing of harness configurations.',
     services: ['Harper-Claw', 'CLS'],
@@ -8258,7 +8268,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 discussion. Existing CLS APIs available for RFQs, OLIs, accounts, opportunities. Deterministic context improves reproducibility and eval quality.',
   },
   {
-    phase: 8, seq: 39,
+    phase: 8, seq: 41,
     title: 'Scenario Player → Integration Tests',
     desc: 'Convert the 5 scenario player journeys into pure function integration tests. Jade-agnostic: test state transition logic based on status inputs flowing to terminal states. Step through journeys to identify missing Jade actions/scenarios.',
     services: ['Agora', 'CLS'],
@@ -8268,7 +8278,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 discussion. Scenarios become customer journey validation tests — not Jade-specific, purely state machine correctness.',
   },
   {
-    phase: 8, seq: 40,
+    phase: 8, seq: 42,
     title: 'Deprecate Harper Team Actions in favor of Placement Work Items',
     desc: 'Harper-claw retains HTA API for backward compatibility but new Jade is more accurate, has better reasoning traces, and is more token efficient. New placement work items (core.work_item with entity_type=placement_intent) replace HTAs as the primary operator action surface.',
     services: ['Harper-Claw', 'CLS'],
@@ -8288,7 +8298,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 discussion. Low effort — component and data both exist, just needs wiring.',
   },
   {
-    phase: 8, seq: 41,
+    phase: 8, seq: 43,
     title: 'CLS: Add GET /remediation-rounds endpoint',
     desc: 'Table exists (core.remediation_round) but no HTTP API is exposed. Needed for round-context display in MegaBro placements timeline and Jade action context.',
     services: ['CLS'],
@@ -8298,7 +8308,7 @@ const ENG_TODOS = [
     notes: 'From 2026-03-25 discussion. Table exists but is not accessible via API.',
   },
   {
-    phase: 8, seq: 42,
+    phase: 8, seq: 44,
     title: 'Populate audit.entity_transition.reason field',
     desc: 'Most transition rows have null reason. If reason is user-visible in the timeline UI, CLS reducers need to populate it when performing transitions.',
     services: ['CLS'],
