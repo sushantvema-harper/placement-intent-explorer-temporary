@@ -7734,7 +7734,7 @@ const ENG_TODOS = [
     services: ['CLS', 'MegaBro'],
     ticket: 'ENG-1795',
     priority: 'High',
-    status: 'In Progress',
+    status: 'Done',
     notes: 'CONFIRMED 2026-03-25: insurance.rfq and insurance.rfq_line_item_v2 (CLS migration 028) DO NOT EXIST in production and will be dropped — they are the legacy names. The canonical tables are insurance.request_for_quote (25,441 rows) and insurance.request_for_quote_line_item (33,150 rows), created by MegaBro backfill 92bc4ccb. CLS migration 028 was never applied and will not be. Full audit in Schema Audit section of Work Items tab. CLS migrations referencing legacy tables that need deprecation: 027_rfq_line_items.sql (CREATE insurance.rfq_line_item), 028_cpq_insurance_two_tier_rfq.sql (CREATE insurance.rfq + insurance.rfq_line_item_v2), 048_create_quote_table.sql (ALTER insurance.rfq_line_item_v2 ADD quote_id), 079_sales_join_indexes.sql (CREATE INDEX on insurance.rfq_line_item_v2), 081_quote_line_parent_graph.sql (ALTER insurance.rfq + insurance.rfq_line_item_v2). None of migrations 027/028/048/079/081 were applied to production. All 5 should be superseded or annotated as no-ops before the next clean-room migration run.',
   },
   {
@@ -8371,6 +8371,9 @@ const ENG_TODOS = [
     'ENG-1814': 'https://linear.app/harpers/issue/ENG-1814/cashmoney-update-presentation-personalizego-to-use-canonical-rfq',
     'ENG-1815': 'https://linear.app/harpers/issue/ENG-1815/megabro-remove-stale-rfq-line-item-v2-comments-from-submissions-api',
     'ENG-1816': 'https://linear.app/harpers/issue/ENG-1816/cls-reconcile-dead-rfqrequestforquote-struct-with-live',
+    'ENG-1817': 'https://linear.app/harpers/issue/ENG-1817/chore-fix-40-pre-existing-golangci-lint-failures-on-main',
+    'ENG-1818': 'https://linear.app/harpers/issue/ENG-1818/chore-adopt-migration-runner-squash-127-migrations-to-baseline-cls',
+    'ENG-1819': 'https://linear.app/harpers/issue/ENG-1819/chore-agora-cascade-cleanup-script-for-accountentity-backfill',
   };
   const LINEAR_BASE = 'https://linear.app/harpers/issue/';
 
