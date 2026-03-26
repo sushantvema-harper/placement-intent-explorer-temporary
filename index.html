@@ -7724,7 +7724,7 @@ const ENG_TODOS = [
     services: ['CLS', 'Agora', 'MegaBro'],
     ticket: 'ENG-1803',
     priority: 'Med',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Documented in Instant Quotes tab. Channel field already exists in Go entity but not in any applied migration.',
   },
   {
@@ -7754,7 +7754,7 @@ const ENG_TODOS = [
     services: ['Agora'],
     ticket: 'ENG-1785',
     priority: 'High',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Bug. Manifests as noisy pgx scan errors in CloudWatch for Agora workflows.',
   },
   {
@@ -7764,7 +7764,7 @@ const ENG_TODOS = [
     services: ['MegaBro'],
     ticket: 'ENG-1786',
     priority: 'Med',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'CONFIRMED 2026-03-25: insurance.order_ext and insurance.v_policy_line_item_full confirmed absent from prod. Neither table exists in information_schema. CLS migration 079 (core/insurance split) was never applied. The planned core.order, core.order_line_item, core.policy, core.policy_line_item tables also do not exist. Full ghost reference table in Schema Audit section of Work Items tab.',
   },
 
@@ -7785,7 +7785,7 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1809',
     priority: 'Low',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Schema audit 2026-03-25. Also audit insurance.payment (20 rows, singular) vs insurance.payments (10,113 rows) — 20 rows may be stale/test data. Clean up after verifying no live references.',
   },
   {
@@ -7795,7 +7795,7 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1811',
     priority: 'Med',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Schema audit 2026-03-25. Exact row-count match (5,881 = 5,881) is suspicious — could be a trigger-based sync, or one was cloned. Check if they have identical data and which table is referenced by application code.',
   },
   {
@@ -7805,7 +7805,7 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1812',
     priority: 'Low',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Schema audit 2026-03-25. No application code should reference these — they were likely seeded during early development and never cleaned up.',
   },
   {
@@ -7815,7 +7815,7 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1813',
     priority: 'High',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Schema audit 2026-03-25. Blocking migration 126 from being safely applied. Investigate whether quote_coverage_line was dropped or never created, then either restore or remove the reference.',
   },
 
