@@ -7775,7 +7775,7 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1807',
     priority: 'Low',
-    status: 'Not Started',
+    status: 'Done',
     notes: 'Schema audit 2026-03-25: all 6 tables confirmed 0 rows in prod. Safe to drop. Adds schema clarity and eliminates namespace confusion.',
   },
   {
@@ -7897,8 +7897,8 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1816',
     priority: 'Med',
-    status: 'Not Started',
-    notes: 'rfq.RequestForQuote (internal/domain/rfq/entity.go) was added by Aatmodhee (2026-02-26) as a design-ahead — it is never instantiated anywhere in the codebase. The live struct is quote.RequestForQuote (internal/domain/quote/entity.go). Blocks cached_status implementation: ComputeRFQStatus() is only in the dead struct\'s package.',
+    status: 'Done',
+    notes: 'CLS PR #116 merged. Dead rfq.RequestForQuote and rfq.RFQLineItem structs deleted. ComputeRFQStatus() wired into live code path.',
   },
 
   // ── Phase 1 ────────────────────────────────────────────────────────────────
@@ -7909,8 +7909,8 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1791',
     priority: 'High',
-    status: 'Not Started',
-    notes: 'Design doc v4 created. Alignment with Finn + Giridhar completed 2026-03-25. PI v2 tab in this tool documents the full state machine. "v2" is a planning label in this tool — the implementation modifies insurance.placement_intent and PlacementIntentMachine in place. Linear status: Backlog.',
+    status: 'Done',
+    notes: 'CLS machines.go: 13-state PlacementIntentMachine implemented with remediation loops. MapPIStatusToRFQLIStatus in rfqli_status.go. Process Manager handlers: ensurePlacementIntent, onPlacementIntentTransition, syncRFQLIStatusFromPI. Migrations 134/135/136 applied (direct state columns, product_id move, RFQ schema cleanup).',
   },
   {
     phase: 1, seq: 7,
@@ -7929,8 +7929,8 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1804',
     priority: 'High',
-    status: 'Not Started',
-    notes: 'Core design decision from 2026-03-25 sync. RFQLI materialization table documented in PI v2 tab. CLS may need rfqli_id added to PI entity for 1:1 link. Backwards compat analysis confirmed: BB reads nothing from RFQLI.status directly (see cls-sync.ts — only callAgora calls). Column can be dropped aggressively.',
+    status: 'Done',
+    notes: 'MapPIStatusToRFQLIStatus implemented in rfqli_status.go. insurance.request_for_quote_line_item.status column dropped (CLS PR #117, migration 137 applied). RFQLI status fully derived from PI.',
   },
   {
     phase: 1, seq: 9,
@@ -7949,8 +7949,8 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1808',
     priority: 'High',
-    status: 'In Progress',
-    notes: 'CLS #104, #112, #113, #114 merged. ensurePlacementIntent initial state and FlowInstantQuote on SI creation done. Remaining: ensurePlacementIntent channel propagation and full PI terminal state → CI phase advancement.',
+    status: 'Done',
+    notes: 'CLS #104, #112, #113, #114 merged. Process Manager handlers fully implemented: ensurePlacementIntent (channel propagation + initial state), onPlacementIntentTransition, syncRFQLIStatusFromPI. PI terminal state → CI phase advancement complete.',
   },
 
   {
@@ -7972,8 +7972,8 @@ const ENG_TODOS = [
     services: ['Agora'],
     ticket: 'ENG-1817',
     priority: 'Low',
-    status: 'Not Started',
-    notes: 'Linear status: Todo. CLS #98 (merged) fixed CI gofmt/test failures — separate issue. The Agora-side lint failures (~40 issues) remain unresolved.',
+    status: 'Done',
+    notes: 'CLS PR #98 merged (gofmt + stale test CI fix). Agora lint failures resolved.',
   },
   {
     phase: 0, seq: 20,
@@ -7982,8 +7982,8 @@ const ENG_TODOS = [
     services: ['Agora'],
     ticket: 'ENG-1819',
     priority: 'High',
-    status: 'Not Started',
-    notes: 'Linear status: Backlog. Simplified cleanup: since Yash is nuking all submission_intent rows, ALL Agora operational tables become orphans — full truncate of packet_enrichment, packet_document_link, submission_dispatch, email_generation_trace, processed_submissions, command_log, etc.',
+    status: 'Done',
+    notes: 'backfill-scripts PR #1 merged. 3,972 PI rows inserted. Agora orphan cleanup completed: packet_enrichment, packet_document_link, submission_dispatch, email_generation_trace, processed_submissions, command_log truncated.',
   },
   {
     phase: 1, seq: 5,
@@ -7992,8 +7992,8 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1820',
     priority: 'Med',
-    status: 'Not Started',
-    notes: 'Linear status: Backlog. Table is currently at 0 rows post-backfill, so CHECK constraint can be added without NOT VALID. Straightforward follow-on to ENG-1808.',
+    status: 'Done',
+    notes: 'CLS PR #115 merged. Migration 138 applied. CHECK constraint on insurance.placement_intent.status enforces all 13 v2 state values.',
   },
   {
     phase: 1, seq: 4,
@@ -8232,8 +8232,8 @@ const ENG_TODOS = [
     services: ['CLS'],
     ticket: 'ENG-1818',
     priority: 'Med',
-    status: 'Not Started',
-    notes: '20 numbering collisions (prefixes 029-035, 049, 076-083, 086-088, 123). Gap 099–120 (22 missing numbers). Migrations 028, 079, 083 never applied to production. No down migrations. Atlas already used for core/cpq/audit schemas — evaluate for consistency.',
+    status: 'Done',
+    notes: 'Migration runner adopted. Migrations 128–138 squashed into baseline. 20 numbering collisions resolved. Migrations 028/079/083 (never applied to prod) marked skipped.',
   },
 
   // ── Phase 7 ────────────────────────────────────────────────────────────────
